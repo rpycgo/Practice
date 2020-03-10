@@ -41,3 +41,33 @@ model_catboost = catboost.train(learn_pool = catboost.load_pool(data = train %>%
                                               learning_rate = 0.001)) 
 confusionMatrix(test$Class %>% as.factor(),
                 factor(model_catboost %>% catboost.predict(catboost.load_pool(test %>% select(-Time, -Class)), prediction_type = 'Class')))
+
+
+
+
+## ensemble
+# set data
+train_ensemble = data.frame(model_xgboost = ifelse(model_xgboost %>% predict(test %>% select(-Time, - Class) %>% as.matrix(), type = 'class') < 0.5, 0, 1)) %>% 
+  bind_cols(data.frame(model_catboost = model_catboost %>% catboost.predict(catboost.load_pool(test %>% select(-Time, -Class)), prediction_type = 'Class')))
+
+
+# xgboost
+model_ensemble_xgboost = xgboost(data = train_ensemble %>% as.matrix(),
+                                 label = test$Class %>% as.numeric(),
+                                 eta = 0.001,
+                                 nrounds = 1000,
+                                 objective = 'binary:logistic',
+                                 eval_metric = 'auc')
+
+confusionMatrix(test$Class %>% as.factor(),
+                ifelse(model_ensemble_xgboost %>% predict(train_ensemble %>% as.matrix()) < 0.5, 0, 1) %>% as.factor())
+
+
+# catboost
+model_catboost = catboost.train(learn_pool = catboost.load_pool(data = train_ensemble, 
+                                                                label = test$Class),
+                                params = list(loss_function = 'MultiClass',
+                                              iterations = 1000,
+                                              learning_rate = 0.001)) 
+confusionMatrix(test$Class %>% as.factor(),
+                factor(model_catboost %>% catboost.predict(catboost.load_pool(train_ensemble), prediction_type = 'Class')))

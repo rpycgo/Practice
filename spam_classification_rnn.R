@@ -2,6 +2,8 @@ require('data.table')
 require('dplyr')
 require('stringr')
 require('keras')
+require('xgboost')
+require('caret')
 
 
 
@@ -61,10 +63,21 @@ history = model_rnn %>%
       batch_size = 64,
       validation_split = 0.3)
 
-
-
-
 # check accuracy
 model_rnn %>% evaluate(x_test, y_test)
 
 
+
+
+# xgboost
+model_xgboost = xgboost(data = x_train,
+                        label = y_train - 1,
+                        eta = 0.001,
+                        nrounds = 1000,
+                        objective = 'binary:logistic',
+                        eval_metric = 'auc',
+                        early_stopping_rounds = 30)
+
+# check accuracy
+confusionMatrix(y_test %>% as.factor(),
+                ifelse(model_xgboost %>% predict(x_test) < 0.5, 1, 2) %>% as.factor())

@@ -2,7 +2,8 @@ require('data.table')
 require('dplyr')
 require('stringr')
 require('keras')
-
+require('xgboost')
+require('caret')
 
 
 
@@ -66,3 +67,19 @@ history = model_lstm %>%
 
 # check accuracy
 model_lstm %>% evaluate(x_test_padding, y_test)
+
+
+
+
+# xgboost
+model_xgboost = xgboost(data = x_train_padding,
+                        label = y_train,
+                        eta = 0.001,
+                        nrounds = 1000,
+                        objective = 'binary:logistic',
+                        eval_metric = 'auc',
+                        early_stopping_rounds = 30)
+
+# check accuracy
+confusionMatrix(y_test %>% as.factor(),
+                ifelse(model_xgboost %>% predict(x_test_padding) < 0.5, 0, 1) %>% as.factor())

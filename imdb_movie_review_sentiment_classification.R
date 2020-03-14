@@ -3,6 +3,7 @@ require('dplyr')
 require('stringr')
 require('keras')
 require('xgboost')
+require('catboost')
 require('caret')
 
 
@@ -83,3 +84,21 @@ model_xgboost = xgboost(data = x_train_padding,
 # check accuracy
 confusionMatrix(y_test %>% as.factor(),
                 ifelse(model_xgboost %>% predict(x_test_padding) < 0.5, 0, 1) %>% as.factor())
+
+
+
+
+# catboost
+model_catboost = catboost.train(learn_pool = catboost.load_pool(data = x_train_padding,
+                                                                label = y_train),
+                                params = list(loss_function = 'CrossEntropy',
+                                              learning_rate = 0.001,
+                                              iterations = 1000,
+                                              task_type = 'GPU')
+)
+
+# check accuracy
+confusionMatrix(y_test %>% as.factor(),
+                model_catboost %>% catboost.predict(catboost.load_pool(x_test_padding),
+                                                    prediction_type = 'Class') %>% 
+                  as.factor())

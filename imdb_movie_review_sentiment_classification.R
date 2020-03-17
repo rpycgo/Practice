@@ -42,6 +42,45 @@ x_test_padding = x_test %>% pad_sequences(maxlen = max_len)
 
 
 # model
+# cnn
+model_cnn = keras_model_sequential() %>% 
+  layer_embedding(input_dim = 5000, output_dim = 500, input_length = 400) %>% 
+  layer_dropout(0.4) %>% 
+  layer_conv_1d(filters = 250,
+                kernel_size = 3,
+                padding = 'valid') %>% 
+  layer_activation_leaky_relu() %>% 
+  layer_global_max_pooling_1d() %>% 
+  layer_dense(units = 250) %>% 
+  layer_activation_leaky_relu() %>% 
+  layer_dropout(0.3) %>% 
+  layer_dense(units = 1, 
+              activation = 'sigmoid') %>% 
+  # compile
+  compile(loss = 'binary_crossentropy',
+          optimizer = 'Nadam',
+          metrics = 'accuracy')
+
+history = model_cnn %>% 
+  fit(x_train_padding,
+      y_train,
+      batch_size = 250, 
+      epochs = 100,
+      validation_split = 0.3,
+      callbacks = list(
+        callback_early_stopping(monitor = 'val_loss',
+                                mode = 'min',
+                                verbose = 1,
+                                patience = 7))
+  )
+
+# check accuracy
+model_cnn %>% evaluate(x_test_padding, y_test)
+
+
+
+
+# lstm
 model_lstm = keras_model_sequential() %>% 
   layer_embedding(input_dim = 5000, output_dim = 400) %>% 
   layer_lstm(units = 200) %>%

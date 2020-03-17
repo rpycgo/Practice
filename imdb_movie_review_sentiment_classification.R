@@ -142,6 +142,44 @@ model_bidirectional_lstm %>% evaluate(x_test_padding, y_test)
 
 
 
+# cnn-lstm
+model_cnn_lstm = keras_model_sequential() %>% 
+  layer_embedding(input_dim = 5000, output_dim = 500, input_length = 400) %>% 
+  layer_dropout(0.4) %>% 
+  layer_conv_1d(filters = 250,
+                kernel_size = 3,
+                padding = 'valid') %>% 
+  layer_activation_leaky_relu() %>% 
+  layer_max_pooling_1d(pool_size = 4) %>% 
+  layer_dense(units = 250) %>% 
+  layer_activation_leaky_relu() %>% 
+  layer_lstm(units = 100) %>% 
+  layer_dense(units = 1, 
+              activation = 'sigmoid') %>% 
+  # compile
+  compile(loss = 'binary_crossentropy',
+          optimizer = 'Nadam',
+          metrics = 'accuracy')
+
+history = model_cnn_lstm %>% 
+  fit(x_train_padding,
+      y_train,
+      batch_size = 250, 
+      epochs = 100,
+      validation_split = 0.3,
+      callbacks = list(
+        callback_early_stopping(monitor = 'val_loss',
+                                mode = 'min',
+                                verbose = 1,
+                                patience = 7))
+  )
+
+# check accuracy
+model_cnn_lstm %>% evaluate(x_test_padding, y_test)
+
+
+
+
 # xgboost
 model_xgboost = xgboost(data = x_train_padding,
                         label = y_train,

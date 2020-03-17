@@ -72,6 +72,37 @@ model_lstm %>% evaluate(x_test_padding, y_test)
 
 
 
+# bidirectional lstm
+model_bidirectional_lstm = keras_model_sequential() %>% 
+  layer_embedding(input_dim = 5000, output_dim = 400) %>% 
+  bidirectional(layer_lstm(units = 200)) %>%
+  layer_dropout(rate = 0.5) %>% 
+  layer_dense(units = 1,
+              activation = 'sigmoid') %>% 
+  # compile
+  compile(loss = 'binary_crossentropy',
+          optimizer = 'Nadam',
+          metrics = 'accuracy')
+
+history = model_bidirectional_lstm %>% 
+  fit(x_train_padding,
+      y_train,
+      batch_size = 250, 
+      epochs = 100,
+      validatoin_split = 0.3,
+      callbacks = list(
+        callback_early_stopping(monitor = 'val_loss',
+                                mode = 'min',
+                                verbose = 1,
+                                patience = 7))
+  )
+
+# check accuracy
+model_bidirectional_lstm %>% evaluate(x_test_padding, y_test)
+
+
+
+
 # xgboost
 model_xgboost = xgboost(data = x_train_padding,
                         label = y_train,

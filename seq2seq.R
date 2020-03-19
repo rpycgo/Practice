@@ -99,3 +99,84 @@ model_seq2seq %>% fit(list(encoder_input_data, decoder_input_data),
                                                 verbose = 1,
                                                 patience = 7))
                       )
+
+
+
+
+# sampling model
+# encoder
+model_encoder = keras_model(encoder_input, encoder_result[2:3])
+# decoder
+decoder_state_input = c(layer_input(shape = latent_dim),
+                        layer_input(shape = latent_dim))
+decoder_result = decoder_lstm(decoder_input,
+                              initial_state = decoder_state_input)
+decoder_state = decoder_result[2:3]
+decoder_output = decoder_dense(decoder_result[[1]])
+decoder_model = keras_model(
+  inputs = c(decoder_input, decoder_state_input),
+  outputs = c(decoder_output, decoder_state)
+)
+
+
+
+# decode
+reverse_input_character_index = input_character %>% as.character()
+reverse_target_character_index = target_character %>% as.character()
+
+decode_sentence = function(input_sentence){
+  
+  state_value = model_encoder %>% predict(input_sentence)
+  
+  target_sentence = array(0, dim = c(1, 1, num_decoder))
+  target_sentence[1, 1, target_token_index['\t']] = 1
+  
+  # loop
+  stop_condition = F
+  decoded_sentence = ''
+  maxiter = decoder_max_length
+  niter = 1
+  while (!stop_condition && niter < maxiter){
+    
+    # output token
+    decoder_predict = model_decoder %>% predict(c(list(target_senuence), state_value))
+    output_token = decoder_predict[[1]]
+    
+    # sample token
+    sample_token_index = which.max(output_token[1, 1, ])
+    sample_char = reverse_target_character_index[sample_token_index]
+    decoded_sentence = str_c(decoded_sentence, sample_char)
+    
+    # exit ccondition
+    if (sampled_char == '\n' ||
+        length(decoded_sentence) > max_decoder_seq_length) {
+      stop_condition = TRUE
+    }
+    
+    # update target sequence
+    target_sequence[1, 1, ] = 0
+    target_sentence[1, 1, sample_token_index] = 1
+    
+    # update state
+    state_value = list(decoder_predict[[2]], decoder_predict[[3]])
+    niter = niter + 1
+  }
+  
+  return(decoded_sentence)
+}
+
+
+
+# check
+for (sentence_index in 1:100){
+  input_sentence = encoder_input_data[sentence_index, , , drop = F]
+  decoded_sentence = decode_sentence(input_sequence)
+  target_sentence = str_c(data$kor[sentence_index], collapse = '') %>% 
+    str_replace_all(pattern = '\t|\n', replacement = '')
+  input_sentence = str_c(data$eng[sentence_index])
+  
+  cat('Input sentence  : ', input_sentence,'\n')
+  cat('Target sentence : ', target_sentence,'\n')
+  cat('Decoded sentence: ', decoded_sentence,'\n')
+  
+}

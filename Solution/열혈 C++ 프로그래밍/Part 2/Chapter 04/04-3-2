@@ -1,0 +1,88 @@
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <iostream>
+#include <cstring>
+
+using namespace std;
+
+
+namespace COMP_POS
+{
+	enum { CLERK, SENIOR, ASSIST, MANAGER };
+
+	void ShowPositionInfo(int position);
+}
+
+
+class NameCard
+{
+private:
+	char * name, * companyName, * phone;
+	int position;
+
+public:
+	NameCard(const char * name_, const char * companyName_, const char * phone_, int position_)
+		: position(position_)
+	{
+		name = new char[strlen(name_) + 1];
+		companyName = new char[strlen(companyName_) + 1];
+		phone = new char[strlen(phone_) + 1];
+
+		strcpy(name, name_);
+		strcpy(companyName, companyName_);
+		strcpy(phone, phone_);
+	}
+
+	void ShowNameCardInfo();
+
+	~NameCard()
+	{
+		delete[] name;
+		delete[] companyName;
+		delete[] phone;
+	}
+};
+
+
+// define COMP_POS function
+void COMP_POS::ShowPositionInfo(int position)
+{
+	switch (position)
+	{
+	case CLERK:
+		cout << "사원" << endl;
+		break;
+	case SENIOR:
+		cout << "주임" << endl;
+		break;
+	case ASSIST:
+		cout << "대리" << endl;
+		break;
+	case MANAGER:
+		cout << "과장" << endl;
+	}
+}
+
+
+// define NameCard function
+void NameCard::ShowNameCardInfo()
+{	
+	cout << "이름: " << name << endl;
+	cout << "회사: " << companyName << endl;
+	cout << "전화번호: " << phone << endl;
+	cout << "직급: "; COMP_POS::ShowPositionInfo(position);
+	cout << endl;
+}
+
+
+
+int main()
+{
+	NameCard manClerk("Lee", "ABCEng", "010-1111-2222", COMP_POS::CLERK);
+	NameCard manSenior("Hong", "OrangeEng", "010-3333-4444", COMP_POS::SENIOR);
+	NameCard manAssist("Kim", "SoGoodComp", "010-5555-6666", COMP_POS::ASSIST);
+
+	manClerk.ShowNameCardInfo();
+	manSenior.ShowNameCardInfo();
+	manAssist.ShowNameCardInfo();
+}

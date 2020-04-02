@@ -1,4 +1,4 @@
 # Reference
 
-### https://wikidocs.net/45101
+### https://wikidocs.net/book/2155
 ### https://github.com/rstudio/keras/tree/master/vignettes/examples

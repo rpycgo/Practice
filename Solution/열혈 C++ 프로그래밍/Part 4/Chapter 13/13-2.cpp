@@ -13,21 +13,29 @@ public:
 	SmartPtr(T* ptr) : posptr(ptr) 
 	{}
 	
-	T& operator*() const
-	{
-		return *posptr;
-	}
-
-	T* operator->() const
-	{
-		return posptr;
-	}
-
-	~SmartPtr()
-	{
-		delete posptr;
-	}
+	T& operator*() const;
+	T* operator->() const;
+	~SmartPtr();
 };
+
+template <typename T>
+T& SmartPtr<T>::operator*() const
+{
+	return *posptr;
+}
+
+template <typename T>
+T* SmartPtr<T>::operator->() const
+{
+	return posptr;
+}
+
+template <typename T>
+SmartPtr<T>::~SmartPtr()
+{
+	delete posptr;
+}
+
 
 
 class Point
@@ -39,17 +47,21 @@ public:
 	Point(int x = 0, int y = 0) : xpos(x), ypos(y)
 	{}
 
-	void SetPos(int x, int y)
-	{
-		xpos = x;
-		ypos = y;
-	}
-
-	void ShowPosition() const 
-	{
-		cout << "[" << xpos << ", " << ypos << "]" << endl;
-	}
+	void SetPos(int x, int y);
+	void ShowPosition() const;
+	
 };
+
+void Point::SetPos(int x, int y)
+{
+	xpos = x;
+	ypos = y;
+}
+
+void Point::ShowPosition() const
+{
+	cout << "[" << xpos << ", " << ypos << "]" << endl;
+}
 
 
 int main()

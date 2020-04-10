@@ -118,8 +118,7 @@ model %>%
       units = char_table %>% length(),
       activation = 'softmax')
   ) %>% 
-  compile
-  (
+  compile(
     loss = "categorical_crossentropy", 
     optimizer = "Nadam", 
     metrics = "accuracy"

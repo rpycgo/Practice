@@ -149,10 +149,11 @@ ADAM_BETA_1 = 0.5
 # discriminator 
 discriminator = build_discriminator() %>% 
   compile(
-    optimizer = optimizer_adam(lr = ADAM_LEARNING,
+    optimizer = optimizer_adam(lr = ADAM_LEARNING, 
                                beta_1 = ADAM_BETA_1),
     loss = list('binary_crossentropy', 'sparse_categorical_crossentropy')
   ) %>% 
+  # to train generate model
   freeze_weights()
 
 # generator
@@ -195,9 +196,9 @@ NUM_TEST = x_test %>% dim() %>% .[1]
 # train
 for(epoch in 1:EPOCH){
   
-  NUM_BATCH = trunc(NUM_TRAIN/BATCH_SIZE)
+  num_batch = trunc(NUM_TRAIN/BATCH_SIZE)
   pb = progress_bar$new(
-    total = NUM_BATCH, 
+    total = num_batch, 
     format = sprintf("epoch %s/%s :elapsed [:bar] :percent :eta", epoch, EPOCH),
     clear = FALSE
   )
@@ -207,7 +208,7 @@ for(epoch in 1:EPOCH){
   
   possible_indexes = 1:NUM_TRAIN
   
-  for(index in 1:NUM_BATCH){
+  for(index in 1:num_batch){
     
     pb$tick()
     
@@ -216,10 +217,10 @@ for(epoch in 1:EPOCH){
       matrix(nr = BATCH_SIZE, nc = LATENT_SIZE)
     
     # real image
-    batch = sample(possible_indexes, size = BATCH_SIZE)
+    batch = sample(x = possible_indexes, size = BATCH_SIZE)
     possible_indexes = possible_indexes[!possible_indexes %in% batch]
     image_batch = x_train[batch, , , , drop = FALSE]
-    label_batch =- y_train[batch]
+    label_batch = y_train[batch]
     
     # Sample some labels from p_c
     sampled_labels = sample(x = 0:9, size = BATCH_SIZE, replace = TRUE) %>%
@@ -274,14 +275,15 @@ for(epoch in 1:EPOCH){
     matrix(nc = 1)
   generated_images = generator %>% predict(list(noise, sampled_labels))
   
-  X = abind(x_train, generated_images, along = 1)
+  X = abind(x_test, generated_images, along = 1)
   y = c(rep(1, NUM_TEST), rep(0, NUM_TEST)) %>% matrix(nc = 1)
   aux_y = c(y_test, sampled_labels) %>% matrix(nc = 1)
   
   # see if the discriminator can figure itself out
   discriminator_test_loss = discriminator %>% 
     evaluate(
-      X, list(y, aux_y), 
+      x = X, 
+      y = list(y, aux_y), 
       verbose = FALSE
     ) %>% 
     unlist()

@@ -23,68 +23,30 @@ BATCH_SIZE = 100
 LATENT_SIZE = 100
 
 LR = 2e-4
-
+BETA1 = 0.5
+BETA2 = 0.999
 
 
 # user define function
 # generator
 build_generator = function(LATENT_SIZE)
 {
-  cnn = keras_model_sequential() %>% 
-    layer_dense(units = 128 * 7 * 7, 
-                use_bias = F) %>%
-    layer_batch_normalization() %>% 
-    layer_activation_leaky_relu() %>% 
-    
-    layer_conv_2d(
-      filters = 64, 
-      kernel_size = c(5, 5), 
-      padding = 'same',
-      use_bias = F
-    ) %>%
-    layer_batch_normalization() %>% 
-    layer_activation_leaky_relu() %>% 
-    
-    layer_conv_2d(
-      filters = 32, 
-      kernel_size = c(5, 5), 
-      strides = c(2, 2),
-      padding = 'same',
-      use_bias = F
-    ) %>%
-    layer_batch_normalization() %>% 
-    layer_activation_leaky_relu() %>% 
-    
-    layer_conv_2d(
-      filters = 1, 
-      kernel_size = c(2, 2), 
-      strides = c(2, 2),
-      padding = 'same', 
-      activation = 'tanh'
-    )
+  model = keras_model_sequential() %>% 
+    layer_dense(units = 256) %>% 
+    layer_activation_leaky_relu(alpha = 0.2) %>% 
+    layer_dense(units = 512) %>% 
+    layer_activation_leaky_relu(alpha = 0.2) %>% 
+    layer_dense(units = 1024) %>% 
+    layer_activation_leaky_relu(alpha = 0.2) %>% 
+    layer_dense(units = 28 * 28,
+                activation = 'tanh')
   
   # input
-  latent = layer_input(shape = list(LATENT_SIZE))
+  input = layer_input(shape = list(LATENT_SIZE))
   
-  # class num
-  image_class = layer_input(shape = list(1))
+  fake_image = input %>% model()
   
-  # 10 classes in MNIST
-  cls = image_class %>%
-    layer_embedding(
-      input_dim = 10, 
-      output_dim = LATENT_SIZE, 
-      embeddings_initializer = 'glorot_normal'
-    ) %>%
-    layer_flatten()
-  
-  
-  # hadamard product between z-space and a class conditional embedding
-  h = layer_multiply(inputs = list(latent, cls))
-  
-  fake_image = h %>% cnn()
-  
-  keras_model(inputs = list(latent, image_class), 
+  keras_model(inputs = input, 
               outputs = fake_image) %>% 
     return()
 }
@@ -92,29 +54,22 @@ build_generator = function(LATENT_SIZE)
 # discriminator
 build_discriminator = function(){
   
-  cnn = keras_model_sequential() %>% 
-    layer_conv_2d(
-      filters = 64, 
-      kernel_size = c(5, 5), 
-      padding = 'same', 
-      strides = c(2, 2)
-    ) %>%
-    layer_activation_leaky_relu() %>%
-    layer_dropout(0.3) %>%
-    
-    layer_conv_2d(
-      filters = 128, 
-      kernel_size = c(3, 3), 
-      strides = c(1, 1),
-      padding = 'same') %>%
-    layer_activation_leaky_relu() %>%
-    layer_flatten()
+  model = keras_model_sequential() %>% 
+    layer_dense(units = 1024) %>%
+    layer_activation_leaky_relu(alpha = 0.2) %>%
+    layer_dropout(rate = 0.3) %>%
+    layer_dense(units = 512) %>%
+    layer_activation_leaky_relu(alpha = 0.2) %>%
+    layer_dropout(rate = 0.3) %>% 
+    layer_dense(units = 256) %>% 
+    layer_activation_leaky_relu(alpha = 0.2) %>% 
+    layer_dropout(rate = 0.3)
   
   # input
-  image = layer_input(shape = c(1, 28, 28))
+  input = layer_input(shape = c(1, 28, 28))
   
   # feature
-  features = image %>% cnn()
+  features = input %>% model()
   
   # fake
   fake = features %>% 
@@ -123,7 +78,7 @@ build_discriminator = function(){
       activation = 'sigmoid', 
       name = 'generation')
   
-  keras_model(inputs = image, 
+  keras_model(inputs = input, 
               outputs = fake) %>% 
     return()
 }
@@ -134,7 +89,7 @@ build_discriminator = function(){
 # discriminator
 discriminator = build_discriminator() %>% 
   compile(
-    optimizer = optimizer_adam(lr = LR),
+    optimizer = optimizer_adam(lr = LR, beta_1 = BETA1, beta_2 = BETA2),
     loss = 'binary_crossentropy'
   ) %>% 
   # to train generate model
@@ -143,7 +98,7 @@ discriminator = build_discriminator() %>%
 # generator
 generator = build_generator() %>% 
   compile(
-    optimizer = optimizer_adam(lr = LR),
-    loss = list('binary_crossentropy', 'sparse_categorical_crossentropy')
+    optimizer = optimizer_adam(lr = LR, beta_1 = BETA1, beta_2 = BETA2),
+    loss = 'sparse_categorical_crossentropy'
   )
   

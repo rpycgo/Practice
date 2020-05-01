@@ -11,11 +11,10 @@ K = backend()
 # sampling
 sampling = function(arg)
 {
-  z_mean = arg[, 1:(LATENT_DIM)]
+  z_mean = arg[, 1:LATENT_DIM]
   z_log_var = arg[, (LATENT_DIM + 1) : (2 * LATENT_DIM)]
   
-  epsilon = k_random_normal
-  (
+  epsilon = k_random_normal(
     shape = c(k_shape(z_mean)[[1]]),
     mean = 0.,
     stddev = EPSILON
@@ -113,7 +112,7 @@ layer = input %>%
   layer_dense(
     units = INTERMEDIATE_DIM,
     activation = 'relu',
-    name = 'hidden-layer'
+    name = 'hidden-layer-1'
   )
 
 z_mean = layer %>% 
@@ -128,17 +127,6 @@ concat = layer_concatenate(inputs = list(z_mean, z_log_var),
                name = 'lambda-layer')
 
 output_shape = c(BATCH_SIZE, 14, 14, 64)
-
-# modeling
-vae = keras_model(inputs = input,
-                  outputs = input_decoded_mean_squash) %>%
-  # compile
-  compile(optimizer = 'rmsprop',
-          loss = vaeLoss)
-
-# encoder
-encoder = keras_model(inputs = input,
-                      outputs = z_mean)
 
 # generator
 decoder_input = layer_input(
@@ -201,10 +189,79 @@ decoded_mean_squash = layer_conv_2d(
   name = 'decoder-mean-squash-layer'
 )
 
-input_decoded_mean_squash = decoded_mean_squash(decoder_layer)
 
+input_decoded_mean_squash = concat %>% 
+  
+  layer_dense(
+    units = INTERMEDIATE_DIM,
+    activation = 'relu',
+    name = 'hidden-layer-2'
+  ) %>%
+  
+  layer_dense(
+    units = prod(output_shape[-1]),
+    activation = 'relu',
+    name = 'upsample-layer'
+  ) %>% 
+  
+  layer_reshape(
+    target_shape = output_shape[-1],
+    name = 'reshape-layer'
+  ) %>% 
+  
+  layer_conv_2d_transpose(
+    filters = 64,
+    kernel_size = c(3, 3),
+    strides = c(1, 1),
+    padding = 'same',
+    activation = 'relu',
+    name = 'deconvolution-layer-1'
+  ) %>% 
+  
+  layer_conv_2d_transpose(
+    filters = 64,
+    kernel_size = c(3, 3),
+    strides = c(1, 1),
+    padding = 'same',
+    activation = 'relu',
+    name = 'deconvolution-layer-2'
+  ) %>% 
+  
+  layer_conv_2d_transpose(
+    filters = 64,
+    kernel_size = c(3, 3),
+    strides = c(1, 1),
+    padding = 'valid',
+    activation = 'relu',
+    name = 'deconvolution-upsample-layer-1'
+  ) %>% 
+  
+  layer_conv_2d(
+    filters = 1,
+    kernel_size = c(2, 2),
+    strides = c(1, 1),
+    padding = 'valid',
+    activation = 'sigmoid',
+    name = 'decoder-mean-squash-layer'
+  )
+  
+gen_input_decoded_mean_squash = decoded_mean_squash(decoder_layer)
+
+
+# vae
+vae = keras_model(inputs = input,
+                  outputs = input_decoded_mean_squash) %>%
+  # compile
+  compile(optimizer = 'rmsprop',
+          loss = vaeLoss)
+
+# encoder
+encoder = keras_model(inputs = input,
+                      outputs = z_mean)
+
+# generator
 generator = keras_model(inputs = decoder_input, 
-                        outputs = input_decoded_mean_squash)
+                        outputs = gen_input_decoded_mean_squash)
 
 # train
 vae %>% 

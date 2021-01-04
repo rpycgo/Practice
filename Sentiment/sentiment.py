@@ -101,3 +101,14 @@ def buildModel(model_name, *args):
         batch_size = 32)
     
     return learner
+
+
+
+
+if __name__ == '__main__':
+    path = 'd:/sentiment/'
+    news = loadData(path)
+    x_train, x_test, y_train, y_test = getTrainAndTestData(news)
+    learner = buildModel('albert-xxlarge-v2', x_train, x_test, y_train, y_test)
+    learner.fit_onecycle(5e-5, 3)
+    learner.validate(class_names = t.get_classes())

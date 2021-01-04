@@ -33,4 +33,6 @@ def loadData(path):
     news.columns = news.iloc[0]
     news = news.iloc[1:].reset_index(drop = True)
     
+    news = news[news.label != 3].reset_index(drop = True)
+    
     return news

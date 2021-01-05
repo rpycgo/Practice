@@ -4,6 +4,7 @@ import tensorflow as tf
 import pandas as pd
 import os
 from sklearn.model_selection import StratifiedKFold
+from Transformers import TFAlbertModel
 import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import Dense, Dropout, Input
@@ -184,7 +185,7 @@ def _buildModel(max_length):
 
 
 
-def KFoldTrain(dataframe, max_length):
+def KFoldTrain(dataframe, max_length, num_folds):
     
     inputs = dataframe.input_ids
     labels = dataframe.label
@@ -202,10 +203,10 @@ def KFoldTrain(dataframe, max_length):
         K.clear_session()
         
         x_train = inputs[train_index]
-        y_train = outputs[train_index]
+        y_train = labels[train_index]
         
         x_valid = inputs[valid_index]
-        y_valid = outputs[valid_index]
+        y_valid = labels[valid_index]
         
         model = _build_model(max_length)
         
@@ -237,5 +238,12 @@ if __name__ == '__main__':
     path = 'c:/etc/code/Sentiment_Analysis/data/'
     news = loadData(path)    
     MAX_LENGTH = 128
-    data = getInputData(news, max_length = MAX_LENGTH)        
-    KFoldTrain(data, max_length = MAX_LENGTH)
+    data = getInputData(
+        news, 
+        max_length = MAX_LENGTH)        
+    NUM_FOLDS = 5
+    KFoldTrain(
+        data, 
+        max_length = MAX_LENGTH, 
+        num_folds = NUM_FOLDS
+    )

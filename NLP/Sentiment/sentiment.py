@@ -121,38 +121,6 @@ def getInputData(dataframe, max_length):
     
 
 
-
-
-def getTrainAndTestData(dataframe):
-    '''    
-
-    Parameters
-    ----------
-    dataframe : dataframe
-        dataframe got from loadData
-
-    Returns
-    -------
-    x_train : dataframe
-        dataframe including title
-    x_test : dataframe
-        dataframe including label
-    y_train : dataframe
-        dataframe including title
-    y_test : dataframe
-        dataframe including label
-
-    '''
-    dataframe = dataframe[dataframe.label != 3].reset_index(drop = True)
-    
-    x_train, x_test, y_train, y_test = train_test_split(
-        dataframe.title, 
-        dataframe.label, 
-        test_size = 0.4)
-    
-    return x_train, x_test, y_train, y_test
-
-
 def _buildModel(max_length):
     
     albert_model = TFAlbertModel.from_pretrained('albert-xxlarge-v2')

@@ -153,38 +153,70 @@ def getTrainAndTestData(dataframe):
     return x_train, x_test, y_train, y_test
 
 
-def buildModel(model_name, *args):    
-    '''    
-
-    Parameters
-    ----------
-    model_name : str
-        model named used in BERT
-    *args : TYPE
-        DESCRIPTION.
-
-    Returns
-    -------
-    learner : ktrain object
-        ktrain object for fitting
-
-    '''
-    albert = text.Transformer(
-        model_name,
-        maxlen = 128,
-        classes = args[1])
+def _buildModel(max_length):
     
-    train = albert.preprocess_train(args[0], args[1])
-    valid = albert.preprocess_train(args[1], args[3])
-    model = albert.get_classifier()
+    albert_model = TFAlbertModel.from_pretrained('albert-xxlarge-v2')
     
-    learner = ktrain.get_learner(
-        model,
-        train_data = train,
-        val_data = valid,
-        batch_size = 32)
+    input_tokens = Input(
+        shape = max_length, 
+        dtype = tf.int32, 
+        name ='input_word_ids'
+        )
     
-    return learner
+    # mask_tokens = Input(
+    #     shape = max_length, 
+    #     dtype = tf.int32, 
+    #     name = 'input_mask'
+    #     )
+    
+    # segment_tokens = Input(
+    #     shape = max_length, 
+    #     dtype = tf.int32, 
+    #     name = 'input_segment'
+    #     )
+    
+    pooler_output = albert_model(input_tokens)['pooler_output']
+    # _, pooler_output = albert_model([input_tokens, mask_tokens, segment_tokens])
+    # pooler_output = GlobalAveragePooling1D()(pooled_output)
+    dropout_layer_1 = Dropout(
+        rate = 0.3,
+        name = 'dropout_layer_1'
+        )(pooler_output)
+    
+    layer2 = Dense(
+        units = 1024,
+        activation = 'relu',
+        name = 'hidden_layer_1'
+        )(dropout_layer_1)
+    
+    dropout_layer_2 = Dropout(
+        rate = 0.3,
+        name = 'dropout_layer_2',
+        )(layer2)
+    
+    output = Dense(
+        units = 2,
+        activation = 'sigmoid',
+        name = 'output'
+        )(dropout_layer_2)
+    
+    model = Model(
+        inputs = input_tokens,
+        outputs = output
+        )
+    
+    # model = Model(
+    #     inputs = [input_tokens, mask_tokens, segment_tokens],
+    #     outputs = output
+    #     )
+    
+    model.compile(
+        optimizer = Adam(learning_rate = 2e-5), 
+        loss = 'binary_crossentropy',
+        metrics = 'accuracy'
+        )
+    
+    return model
 
 
 

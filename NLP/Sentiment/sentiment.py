@@ -194,6 +194,55 @@ def _buildModel(max_length):
 
 
 
+def KFoldTrain(dataframe, max_length):
+    
+    inputs = dataframe.input_ids
+    labels = dataframe.label
+  
+    stratified_k_fold = StratifiedKFold(
+        n_splits = num_folds,
+        shuffle = True
+        )
+    
+    test_predict = []
+    
+    for fold, (train_index, valid_index) in enumerate(stratified_k_fold.split(inputs, labels)):
+        print(f'executing fold no: {fold + 1}')
+        
+        K.clear_session()
+        
+        x_train = inputs[train_index]
+        y_train = outputs[train_index]
+        
+        x_valid = inputs[valid_index]
+        y_valid = outputs[valid_index]
+        
+        model = _build_model(max_length)
+        
+        early_stop = EarlyStopping(
+            monitor = 'val_loss', 
+            min_delta = 0, 
+            patience = 5, 
+            verbose = 1, 
+            mode = 'auto',
+            baseline = None,
+            restore_best_weights = True
+            )
+        
+        model.fit(
+            x = x_train, 
+            y = y_train,
+            epochs = 3,
+            batch_size = 64,
+            validation_split = 0.3,
+            callbacks = [early_stop]
+            )
+        
+        test_predict.append(model.predict_classes(x_valid))
+
+
+
+
 if __name__ == '__main__':
     path = 'c:/etc/code/Sentiment_Analysis/data/'
     news = loadData(path)    

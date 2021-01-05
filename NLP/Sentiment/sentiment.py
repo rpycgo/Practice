@@ -4,7 +4,14 @@ import tensorflow as tf
 import pandas as pd
 import os
 from sklearn.model_selection import train_test_split
-from ktrain import text
+from sklearn.model_selection import GroupKFold
+import tensorflow as tf
+import tensorflow.keras.backend as K
+from tensorflow.keras.layers import Dense, Dropout, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 labels = ['0', '1']
 
@@ -190,9 +197,13 @@ def _buildModel(max_length):
 
 
 if __name__ == '__main__':
-    path = 'd:/sentiment/'
-    news = loadData(path)
-    x_train, x_test, y_train, y_test = getTrainAndTestData(news)
-    learner = buildModel('albert-xxlarge-v2', x_train, x_test, y_train, y_test)
-    learner.fit_onecycle(5e-5, 3)
-    learner.validate(class_names = t.get_classes())
+    path = 'c:/etc/code/Sentiment_Analysis/data/'
+    news = loadData(path)    
+    MAX_LENGTH = 128
+    data = getInputData(news, max_length = MAX_LENGTH)    
+    x_train, x_test, y_train, y_test = train_test_split(
+        data.input_ids,
+        data.label,
+        test_size = 0.3)
+    buildModel(max_length = MAX_LENGTH)
+    KFoldTrain()

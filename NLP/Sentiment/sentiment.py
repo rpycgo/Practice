@@ -90,6 +90,33 @@ class tokenizer():
         converted = self._loadIdTokenizer().convert_tokens_to_ids(x)
         
         return converted
+    
+    
+    
+    
+def getInputData(dataframe, max_length):
+    
+    dataframe = dataframe[dataframe.label.str.contains('0|1')].reset_index(drop = True)
+    
+    tokenizer = tokenizer()
+
+    dataframe['input_ids'] = dataframe.title.apply(lambda x: ' '.join(['[CLS]', x, '[SEP]']))
+    dataframe.input_ids = dataframe.input_ids.apply(lambda x: tokenizer.convert_tokens_to_ids(x))    
+        
+    dataframe['mask'] = dataframe.input_ids.apply(lambda x: [1] * len(x))
+    dataframe.mask = dataframe['mask'].apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post')[0])
+    
+    dataframe['segment'] = dataframe.input_ids.apply(lambda x: [0] * max_length)
+    
+    dataframe.input_ids = dataframe.input_ids.apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post')[0])
+    
+    dataframe = dataframe[['input_ids', 'mask', 'segment', 'label']]
+    dataframe.reset_index(
+        drop = True,
+        inplace = True
+        )
+    
+    return dataframe
         
     
 

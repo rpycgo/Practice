@@ -11,17 +11,14 @@ labels = ['0', '1']
 
 def loadData(path):
     '''    
-
     Parameters
     ----------
     path : directory
         path where data exist.
-
     Returns
     -------
     news : dataframe
         dataframe including news data.
-
     '''
     news = pd.DataFrame()
     
@@ -35,6 +32,7 @@ def loadData(path):
     
     news.columns = news.iloc[0]
     news = news.iloc[1:].reset_index(drop = True)
+    news.label = news.label.astype('str').apply(lambda x: x[:1])
     
     return news
 

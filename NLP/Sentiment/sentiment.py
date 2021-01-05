@@ -3,8 +3,7 @@
 import tensorflow as tf
 import pandas as pd
 import os
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import StratifiedKFold
 import tensorflow as tf
 import tensorflow.keras.backend as K
 from tensorflow.keras.layers import Dense, Dropout, Input
@@ -12,8 +11,6 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.preprocessing.sequence import pad_sequences
-
-labels = ['0', '1']
 
 
 def loadData(path):
@@ -62,6 +59,7 @@ class tokenizer():
 
         '''
         !cd c:/etc/code/Sentiment_Analysis
+        import tokenization
         
     
     def _loadTokenizer(self):

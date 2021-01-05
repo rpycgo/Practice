@@ -247,10 +247,5 @@ if __name__ == '__main__':
     path = 'c:/etc/code/Sentiment_Analysis/data/'
     news = loadData(path)    
     MAX_LENGTH = 128
-    data = getInputData(news, max_length = MAX_LENGTH)    
-    x_train, x_test, y_train, y_test = train_test_split(
-        data.input_ids,
-        data.label,
-        test_size = 0.3)
-    buildModel(max_length = MAX_LENGTH)
-    KFoldTrain()
+    data = getInputData(news, max_length = MAX_LENGTH)        
+    KFoldTrain(data, max_length = MAX_LENGTH)

@@ -37,6 +37,65 @@ def loadData(path):
     return news
 
 
+
+
+class tokenizer():
+    
+    def __init__(self):
+        '''        
+
+        Parameters
+        ----------
+        path : directory
+            directory where tokenization.py got from ETRI
+ 
+        Returns
+        -------
+        None.
+
+        '''
+        !cd c:/etc/code/Sentiment_Analysis
+        
+    
+    def _loadTokenizer(self):
+        
+        vocab = tokenization.load_vocab('vocab.korean.rawtext.list')
+        tokenizer = tokenization.WordpieceTokenizer(vocab)
+    
+        return tokenizer
+
+
+    def _loadIdTokenizer(self):
+            
+        id_tokenizer = tokenization.FullTokenizer('vocab.korean.rawtext.list')
+        
+        return id_tokenizer
+    
+    
+    def convert_tokens_to_ids(self, sentence):
+        '''        
+
+        Parameters
+        ----------
+        sentence : str
+            sentence what you want to convert to ids
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        tokenized = self._loadTokenizer().tokenize(sentence)
+        converted = self._loadIdTokenizer().convert_tokens_to_ids(x)
+        
+        return converted
+        
+    
+
+
+
+
 def getTrainAndTestData(dataframe):
     '''    
 

@@ -12,6 +12,8 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
+import tokenization
+
 
 def loadData(path):
     '''    
@@ -46,25 +48,13 @@ def loadData(path):
 class tokenizer():
     
     def __init__(self):
-        '''        
-
-        Parameters
-        ----------
-        path : directory
-            directory where tokenization.py got from ETRI
- 
-        Returns
-        -------
-        None.
-
-        '''
-        !cd c:/etc/code/Sentiment_Analysis
-        import tokenization
-        
+        self.vocab = 'vocab.korean.rawtext.list'
+        self.tokenizer = self._loadTokenizer()
+        self.id_tokenizer = self._loadIdTokenizer()
     
     def _loadTokenizer(self):
         
-        vocab = tokenization.load_vocab('vocab.korean.rawtext.list')
+        vocab = tokenization.load_vocab(self.vocab)
         tokenizer = tokenization.WordpieceTokenizer(vocab)
     
         return tokenizer
@@ -72,7 +62,7 @@ class tokenizer():
 
     def _loadIdTokenizer(self):
             
-        id_tokenizer = tokenization.FullTokenizer('vocab.korean.rawtext.list')
+        id_tokenizer = tokenization.FullTokenizer(self.vocab)
         
         return id_tokenizer
     
@@ -91,8 +81,8 @@ class tokenizer():
 
         '''
         
-        tokenized = self._loadTokenizer().tokenize(sentence)
-        converted = self._loadIdTokenizer().convert_tokens_to_ids(x)
+        tokenized = self.tokenizer.tokenize(sentence)
+        converted = self.id_tokenizer.convert_tokens_to_ids(x)
         
         return converted
     

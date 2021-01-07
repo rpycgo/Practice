@@ -3,6 +3,7 @@
 import tensorflow as tf
 import pandas as pd
 import os
+from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import StratifiedKFold
 from Transformers import TFAlbertModel
 import tensorflow as tf
@@ -104,7 +105,7 @@ def getInputData(dataframe, max_length):
     
     dataframe['segment'] = dataframe.input_ids.apply(lambda x: [0] * max_length)
     
-    dataframe.input_ids = dataframe.input_ids.apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post'))
+    dataframe.input_ids = dataframe.input_ids.apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post')[0])
     
     dataframe = dataframe[['input_ids', 'mask', 'segment', 'label']]
     dataframe.reset_index(
@@ -188,7 +189,9 @@ def _buildModel(max_length):
 def KFoldTrain(dataframe, max_length, num_folds):
     
     inputs = dataframe.input_ids
-    labels = dataframe.label
+    encoder = LabelEncoder()
+    encoderi.fit(dataframe.label)    
+    labels = encoder.transform(dataframe.label)
   
     stratified_k_fold = StratifiedKFold(
         n_splits = num_folds,
@@ -202,11 +205,11 @@ def KFoldTrain(dataframe, max_length, num_folds):
         
         K.clear_session()
         
-        x_train = inputs[train_index].tolist()
-        y_train = labels[train_index].tolist()
+        x_train = np.asarray(inputs[train_index].tolist(), dtype = np.int32)
+        y_train = np.asarray(labels[train_index].tolist())
         
-        x_valid = inputs[valid_index].tolist()
-        y_valid = labels[valid_index].tolist()
+        x_valid = np.asarray(inputs[valid_index].tolist(), dtype = np.int32)
+        y_valid = np.asarray(labels[valid_index].tolist())
         
         model = _build_model(max_length)
         
@@ -224,7 +227,7 @@ def KFoldTrain(dataframe, max_length, num_folds):
             x = x_train, 
             y = y_train,
             epochs = 3,
-            batch_size = 64,
+            batch_size = 16,
             validation_split = 0.3,
             callbacks = [early_stop]
             )

@@ -100,11 +100,11 @@ def getInputData(dataframe, max_length):
     dataframe.input_ids = dataframe.input_ids.apply(lambda x: tokenizer.convert_tokens_to_ids(x))    
         
     dataframe['mask'] = dataframe.input_ids.apply(lambda x: [1] * len(x))
-    dataframe.mask = dataframe['mask'].apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post')[0])
+    dataframe.mask = dataframe['mask'].apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post'))
     
     dataframe['segment'] = dataframe.input_ids.apply(lambda x: [0] * max_length)
     
-    dataframe.input_ids = dataframe.input_ids.apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post')[0])
+    dataframe.input_ids = dataframe.input_ids.apply(lambda x: pad_sequences([x], maxlen = max_length, padding = 'post'))
     
     dataframe = dataframe[['input_ids', 'mask', 'segment', 'label']]
     dataframe.reset_index(
@@ -202,11 +202,11 @@ def KFoldTrain(dataframe, max_length, num_folds):
         
         K.clear_session()
         
-        x_train = inputs[train_index]
-        y_train = labels[train_index]
+        x_train = inputs[train_index].tolist()
+        y_train = labels[train_index].tolist()
         
-        x_valid = inputs[valid_index]
-        y_valid = labels[valid_index]
+        x_valid = inputs[valid_index].tolist()
+        y_valid = labels[valid_index].tolist()
         
         model = _build_model(max_length)
         

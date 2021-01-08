@@ -198,7 +198,7 @@ def KFoldTrain(dataframe, max_length, num_folds):
         shuffle = True
         )
     
-    test_predict = []
+    albert_model = []
     
     for fold, (train_index, valid_index) in enumerate(stratified_k_fold.split(inputs, labels)):
         print(f'executing fold no: {fold + 1}')
@@ -232,7 +232,9 @@ def KFoldTrain(dataframe, max_length, num_folds):
             callbacks = [early_stop]
             )
         
-        test_predict.append(model.predict_classes(x_valid))
+        albert_model.append(model)
+        
+    return albert_model
 
 
 
@@ -245,8 +247,9 @@ if __name__ == '__main__':
         news, 
         max_length = MAX_LENGTH)        
     NUM_FOLDS = 5
-    KFoldTrain(
+    albert_model = KFoldTrain(
         data, 
         max_length = MAX_LENGTH, 
         num_folds = NUM_FOLDS
     )
+    

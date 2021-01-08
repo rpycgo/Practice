@@ -213,6 +213,12 @@ def KFoldTrain(dataframe, max_length, num_folds):
         
         model = _build_model(max_length)
         
+        tensorboard = tf.keras.callbacks.TensorBoard(
+            log_dir = 'tensorboard',
+            write_graph = True,
+            write_images = True
+        )
+        
         early_stop = EarlyStopping(
             monitor = 'val_loss', 
             min_delta = 0, 
@@ -229,7 +235,10 @@ def KFoldTrain(dataframe, max_length, num_folds):
             epochs = 3,
             batch_size = 16,
             validation_split = 0.3,
-            callbacks = [early_stop]
+            callbacks = [
+                early_stop,
+                tensorboard
+                ]
             )
         
         albert_model.append(model)

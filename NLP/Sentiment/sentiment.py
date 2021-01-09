@@ -205,11 +205,11 @@ def KFoldTrain(dataframe, max_length, num_folds):
         
         K.clear_session()
         
-        x_train = np.asarray(inputs[train_index].tolist(), dtype = np.int32)
-        y_train = np.asarray(labels[train_index].tolist())
+        x_train = inputs[train_index].tolist()
+        y_train = labels[train_index]
         
-        x_valid = np.asarray(inputs[valid_index].tolist(), dtype = np.int32)
-        y_valid = np.asarray(labels[valid_index].tolist())
+        x_valid = inputs[valid_index].tolist()
+        y_valid = labels[valid_index]
         
         model = _build_model(max_length)
         

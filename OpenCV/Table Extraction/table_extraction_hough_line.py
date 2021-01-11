@@ -4,6 +4,13 @@ import numpy as np
 
 
 
+def getFile(file):
+  
+    image = cv.imread(cv.samples.findFile(file))
+  
+    return image
+
+
 def showImage(function):
     def wrapper(self, image):
         image = function(self, image)

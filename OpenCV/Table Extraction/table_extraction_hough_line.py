@@ -12,8 +12,8 @@ def getFile(file):
 
 
 def showImage(function):
-    def wrapper(self, image):
-        image = function(self, image)
+    def wrapper(self):
+        image = function(self)
         cv.imshow('image', image)
         cv.waitKey(0)
         # cv.destroyWindow('image')
@@ -22,18 +22,30 @@ def showImage(function):
 
   
 class Image:
-          
-    @showImage
-    def showGrayImage(self, image):
-      
-        gray_image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    
+    def __init__(self, image):
+        self.image = image
+        
+        
+    def getGrayImage(self):
+        
+        gray_image = cv.cvtColor(self.image, cv.COLOR_BGR2GRAY)
         
         return gray_image
-  
     
-    @showImage
-    def showCannyImage(self, gray_image):
       
+    @showImage
+    def showGrayImage(self):
+      
+        gray_image = self.getGrayImage()
+        
+        return gray_image
+        
+      
+    @showImage
+    def showCannyImage(self):
+      
+        gray_image = self.getGrayImage()
         canny_image = cv.Canny(gray_image, 50, 150)
       
         return canny_image
@@ -46,5 +58,6 @@ if __name__ == '__main__':
     image = getFile(file)
     image_copy = np.copy(image)
   
-    showGrayImage(image)
-    showCannyImage(image)
+    showimage = Image(image)
+    showimage.showGrayImage()
+    showimage.showCannyImage()

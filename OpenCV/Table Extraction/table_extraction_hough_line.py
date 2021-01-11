@@ -4,13 +4,6 @@ import numpy as np
 
 
 
-def getFile(file):
-  
-    image = cv.imread(cv.samples.findFile(file))
-  
-      return image
-  
-  
 def showImage(function):
     def wrapper(image):
         image = function(image)
@@ -24,7 +17,7 @@ def showGrayImage(image):
   
     gray_image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
   
-      return gray_image
+    return gray_image
   
   
 @showImage
@@ -32,7 +25,7 @@ def showCannyImage(gray_image):
   
     canny_image = cv.Canny(gray_image, 50, 150)
   
-      return canny_image
+    return canny_image
   
   
   

@@ -5,29 +5,31 @@ import numpy as np
 
 
 def showImage(function):
-    def wrapper(image):
-        image = function(image)
+    def wrapper(self, image):
+        image = function(self, image)
         cv.imshow('image', image)
         cv.waitKey(0)
         # cv.destroyWindow('image')
     
-    return wrapper        
-    
+    return wrapper
 
-@showImage
-def showGrayImage(image):
   
-    gray_image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+class Image:
+          
+    @showImage
+    def showGrayImage(self, image):
+      
+        gray_image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+        
+        return gray_image
   
-    return gray_image
-  
-  
-@showImage
-def showCannyImage(gray_image):
-  
-    canny_image = cv.Canny(gray_image, 50, 150)
-  
-    return canny_image
+    
+    @showImage
+    def showCannyImage(self, gray_image):
+      
+        canny_image = cv.Canny(gray_image, 50, 150)
+      
+        return canny_image
   
   
   

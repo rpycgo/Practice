@@ -10,7 +10,9 @@ def showImage(function):
         cv.imshow('image', image)
         cv.waitKey(0)
         # cv.destroyWindow('image')
-
+    
+    return wrapper        
+    
 
 @showImage
 def showGrayImage(image):

@@ -144,11 +144,11 @@ if __name__ == '__main__':
     
     # get hough line
     hough_lines = cv.HoughLinesP(
-        image = showimage.getCannyImage(), 
-        rho = 1,
-        theta = np.pi / 180,
-        threshold = THRESHOLD = 50, 
+        showimage.getCannyImage(),   # image
+        1,                           # rho
+        np.pi / 180,                 # theta
+        50,                          # threshold
         None,
-        minLinLength = 350,
-        maxLineGap = 6
+        350,                         # minLineLength
+        6                            # maxLineGap
         )

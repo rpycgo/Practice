@@ -67,9 +67,71 @@ class Image:
         canny_image = self.getCannyImage()
       
         return canny_image
-  
-  
-  
+      
+      
+class Cell:
+    
+    def __init__(self, hough_lines, image):
+        self.__image = image
+        self.hough_lines = hough_lines
+        self.vertical_lines = []
+        self.horizontal_lines = []
+        
+        self._getVerticalAndHorizontal()
+    
+    
+    @property
+    def image(self):
+        return self.__image
+    
+    
+    @image.setter
+    def image(self, image):
+        
+        self.__image = image
+    
+    
+    
+    def _getVerticalAndHorizontal(self):
+        
+        if self.hough_lines is not None:
+            for i in range(len(self.hough_lines)):
+                line = self.hough_lines[i][0]
+                
+                if ( isVertical(line) ):
+                    self.vertical_lines.append(line)
+                if ( isHorizontal(line) ):
+                    self.horizontal_lines.append(line)
+    
+    
+    @showImage                    
+    def enterLine(self):
+        
+        for _, vertical_and_horizontal_lines in enumerate(zip(self.vertical_lines, self.horizontal_lines)):
+            vertical_line, horizontal_line = vertical_and_horizontal_lines
+            # vertical
+            cv.line(
+                self.__image,                          # image
+                (vertical_line[0], vertical_line[1]),  # pt1
+                (vertical_line[2], vertical_line[3]),  # pt2
+                (0, 255, 0),                           # color
+                3,                                     # thickness
+                cv.LINE_AA                             # lineType
+                )
+            # horizontal
+            cv.line(
+                self.__image,                              # image
+                (horizontal_line[0], horizontal_line[1]),  # pt1
+                (horizontal_line[2], horizontal_line[3]),  # pt2
+                (0, 255, 0),                               # color
+                3,                                         # thickness
+                cv.LINE_AA                                 # lineType
+                )
+        
+        return self.__image
+      
+      
+       
   
 if __name__ == '__main__':
     file = 'd:/source.png'

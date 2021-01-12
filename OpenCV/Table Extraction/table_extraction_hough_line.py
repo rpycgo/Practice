@@ -69,3 +69,18 @@ if __name__ == '__main__':
     showimage = Image(image)
     showimage.showGrayImage()
     showimage.showCannyImage()
+    
+    RHO = 1
+    THETA = np.pi/180
+    THRESHOLD = 50
+    MIN_LINE_LENGTH = 350
+    MAX_LINE_GAP = 6
+    hough_lines = cv.HoughLinesP(
+        image = showimage.getCannyImage, 
+        rho = ROH, 
+        theta = THETA, 
+        threshold = THRESHOLD, 
+        None, 
+        minLinLength = MIN_LINE_LENGTH, 
+        maxLineGap = MAX_LINE_GAP
+        )

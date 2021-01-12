@@ -152,3 +152,7 @@ if __name__ == '__main__':
         350,                         # minLineLength
         6                            # maxLineGap
         )
+    
+    # cell
+    cell = Cell(hough_lines, image_copy)
+    cell.enterLine()

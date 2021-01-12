@@ -33,6 +33,14 @@ class Image:
         
         return gray_image
     
+    
+    def getCannyImage(self):
+        
+        gray_image = self.getGrayImage()
+        canny_image = cv.Canny(gray_image, 50, 150)
+      
+        return canny_image
+        
       
     @showImage
     def showGrayImage(self):
@@ -41,12 +49,12 @@ class Image:
         
         return gray_image
         
-      
+  
+    
     @showImage
     def showCannyImage(self):
       
-        gray_image = self.getGrayImage()
-        canny_image = cv.Canny(gray_image, 50, 150)
+        canny_image = self.getCannyImage()
       
         return canny_image
   

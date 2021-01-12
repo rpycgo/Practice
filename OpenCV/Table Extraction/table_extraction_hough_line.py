@@ -21,6 +21,16 @@ def showImage(function):
     return wrapper
 
   
+def isVertical(line):
+  
+    return line[0] == line[2]
+  
+
+def isHorizontal(line):
+  
+    return line[1] == line[3] 
+  
+
 class Image:
     
     def __init__(self, image):

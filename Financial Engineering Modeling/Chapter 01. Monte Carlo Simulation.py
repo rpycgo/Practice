@@ -127,14 +127,34 @@ def get_european_call_option(variance_reduction = False):
     se = sd / math.sqrt(exam)
     
     return (cvt, sd, se)
+
+
+
+
+def get_cholesky_decomposition(array):
     
-            
-            
-            
-            
-            
-            
-            
+    # check matrix
+    row, col = array.shape[0], array.shape[1]
+    assert row == col
+    
+    cholesky_matrix = np.zeros((row, col))
+    
+    cholesky_matrix[0, 0] = math.sqrt(array[0, 0])
+    for i in range(1, row):
+        cholesky_matrix[i, 0] = array[i, 0] / cholesky_matrix[0, 0]
         
-        
-        
+    for j in range(1, row):
+        for i in range(row):
+            if j > i:
+                continue
+            else:
+                s = 0
+                for k in range(j):
+                    s += ( cholesky_matrix[i, k] * cholesky_matrix[j, k] )
+                if i == j:
+                    cholesky_matrix[i, j] = math.sqrt(array[i, j] - s)
+                else:
+                    cholesky_matrix[i, j] = ( array[i, j] - s ) / cholesky_matrix[j, j]
+    
+    return cholesky_matrix
+    

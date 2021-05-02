@@ -33,7 +33,7 @@ import math
 
 
 
-def get_european_call_option():
+def get_european_call_option(variance_reduction = False):
     
     # if kwargs.get(intprc):
     #     intprc = kwargs.get(intprc)
@@ -89,11 +89,15 @@ def get_european_call_option():
     dt = tau / step    
     sum1 = 0
     sum2 = 0
-    ary = np.array([0.] * 10)
+    ary1 = np.array([0.] * 10)
+    if variance_reduction:
+        ary2 = np.array([0.] * 10)
 
     
     for _ in range(exam):
-        ary[0] = intprc
+        ary1[0] = intprc        
+        if variance_reduction:
+            ary2[0] = intprc
         
         for j in range(1, step):
             u1 = np.random.uniform(0, 1, 1)[0] # 0 ~ 1사이의 난수를 발생시킨다
@@ -103,11 +107,17 @@ def get_european_call_option():
             Z = math.sqrt( -2 * math.log(u1) ) * math.cos(2 * math.pi * u2)
             
             ''' X ~ N(Mean, Vol)인 정규분포 난수를 발생시킨다 '''
-            X = ( ( r - vol ** 2 / 2) * dt ) + ( vol * Z * math.sqrt(dt))
+            X1 = ( ( r - vol ** 2 / 2) * dt ) + ( vol * Z * math.sqrt(dt))
+            if variance_reduction:
+                X2 = ( ( r - vol ** 2 / 2) * dt ) + ( vol * (-Z) * math.sqrt(dt))
             
-            ary[j] = ary[j - 1] * math.exp(X)
+            ary1[j] = ary1[j - 1] * math.exp(X1)
+            if variance_reduction:
+                ary2[j] = ary2[j - 1] * math.exp(X2)
         
-        cv = max(0, ary[-1] - K)
+        cv = max(0, ary1[-1] - K)
+        if variance_reduction:
+            cv = 0.5 * ( max(0, ary1[-1] - K) + max(0, ary2[-1] - K) )
         
         sum1 += cv
         sum2 += ( cv * cv )

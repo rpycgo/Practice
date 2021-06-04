@@ -12,21 +12,20 @@ from itertools import chain
 
 import pandas as pd
 import numpy as np
+import re
 import json
 import logger
 import torch
+from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from tqdm import tqdm
-from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from transformers import (
     AdamW,
-    T5ForConditionalGeneration,
-    T5Tokenizer,
-    get_linear_schedule_with_warmup
-    
+    MT5ForConditionalGeneration,
+    T5TokenizerFast as T5Tokenizer    
 )
 
 
@@ -61,6 +60,7 @@ class NewsSummaryDataset(Dataset):
         self.tokenizer = tokenizer
         self.data = data
         self.text_max_token_length = text_max_token_length
+        self.summary_max_token_length = summary_max_token_length
         
     
     def __len__(self):
@@ -71,8 +71,10 @@ class NewsSummaryDataset(Dataset):
         
         data_row = self.data.iloc[index]
         
+        original_article = ' '.join(data_row['article_original'])
+        
         encoded_article = tokenizer(
-            data_row.article_original,
+            original_article,
             max_length = self.text_max_token_length, 
             padding = 'max_length', 
             truncation = True, 
@@ -83,8 +85,8 @@ class NewsSummaryDataset(Dataset):
         
         
         encoded_summarized_article = tokenizer(
-            data_row.abstractive,
-            max_length = self.text_max_token_length,
+            data_row['abstractive'],
+            max_length = self.summary_max_token_length,
             padding = 'max_length',
             truncation = True,
             return_attention_mask = True,
@@ -93,17 +95,17 @@ class NewsSummaryDataset(Dataset):
             )
         
         
-        labels = encoded_summarized_article.input_ids
-        labels[labels ==0] = -100
+        labels = encoded_summarized_article['input_ids']
+        labels[labels == 0] = -100
         
         
         return dict(
-            original_article = data_row['article_original'],
+            original_article = original_article,
             summary = data_row['abstractive'],
             text_input_ids = encoded_article['input_ids'].flatten(),
             text_attention_mask = encoded_article['attention_mask'].flatten(),
             labels = labels.flatten(),
-            labels_attention_mask = encoded_summarized_article['attention_mask'].flatten(),
+            labels_attention_mask = encoded_summarized_article['attention_mask'].flatten()
             )
     
     
@@ -113,8 +115,8 @@ class NewsSummaryDataModule(pl.LightningDataModule):
     
     def __init__(            
         self,
-        train_df: pd.DataFrame,
-        test_df: pd.DataFrame,
+        train_dataframe: pd.DataFrame,
+        test_dataframe: pd.DataFrame,
         tokenizer: T5Tokenizer,
         batch_size: int = 8,
         text_max_token_length: int = 512,
@@ -123,8 +125,8 @@ class NewsSummaryDataModule(pl.LightningDataModule):
     
         super().__init__()
         
-        self.train_df = train_df
-        self.test_df = test_df
+        self.train_dataframe = train_dataframe
+        self.test_dataframe = test_dataframe
         
         self.batch_size = batch_size
         self.tokenizer = tokenizer
@@ -134,14 +136,14 @@ class NewsSummaryDataModule(pl.LightningDataModule):
     
     def setup(self, stage = None):
         self.train_dataset = NewsSummaryDataset(
-            self.train_df,
+            self.train_dataframe,
             self.tokenizer,
             self.text_max_token_length,
             self.summary_max_token_length
             )
         
         self.test_dataset = NewsSummaryDataset(
-            self.test_df,
+            self.test_dataframe,
             self.tokenizer,
             self.text_max_token_length,
             self.summary_max_token_length
@@ -152,7 +154,7 @@ class NewsSummaryDataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset,
             batch_size = self.batch_size,
-            shuffle = False
+            shuffle = True
             )
     
     
@@ -178,7 +180,7 @@ class NewsSummaryModel(pl.LightningModule):
     
     def __init__(self):
         super().__init__()
-        self.model = T5ForConditionalGeneration.from_pretrained('google/mt5-base', return_dict = True)
+        self.model = MT5ForConditionalGeneration.from_pretrained('google/mt5-base', return_dict = True)
         
         
     def forward(self, input_ids, attention_mask, decoder_attention_mask, labels = None):
@@ -216,7 +218,7 @@ class NewsSummaryModel(pl.LightningModule):
         labels = batch['labels']
         labels_attention_mask = batch['labels_attention_mask']
         
-        loss, outputs = self(
+        loss, outputs = self.model(
             input_ids = input_ids,
             attention_mask = attention_mask,
             decoder_attention_mask = labels_attention_mask,
@@ -233,7 +235,7 @@ class NewsSummaryModel(pl.LightningModule):
         labels = batch['labels']
         labels_attention_mask = batch['labels_attention_mask']
         
-        loss, outputs = self(
+        loss, outputs = self.model(
             input_ids = input_ids,
             attention_mask = attention_mask,
             decoder_attention_mask = labels_attention_mask,
@@ -245,7 +247,7 @@ class NewsSummaryModel(pl.LightningModule):
     
     
     def configure_optimizers(self):
-        return AdamW(self.parameters(), lr = 1e-5)
+        return AdamW(self.parameters(), lr = 1e-4)
     
     
     
@@ -271,21 +273,22 @@ def summarize(text):
 if __name__ == '__main__':
     
     data = load_data('data/생성요약/train.jsonl')
+    data.abstractive = data.abstractive.apply(lambda x: x.replace('\n', '')).apply(lambda x: re.sub('\s{2,}', ' ', x))
     train, test = train_test_split(data, test_size = 0.1)
     
     
     tokenizer = T5Tokenizer.from_pretrained('google/mt5-base')
     
-    train = SummaryDataset(train, tokenizer)
-    test = SummaryDataset(test, tokenizer)
+    # train = SummaryDataset(train, tokenizer)
+    # test = SummaryDataset(test, tokenizer)
     
-    text_token_counts, summary_token_counts = [], []
-    for row in tqdm(train.itertuples()):
-        text_token_count = len(tokenizer.encode(' '.join(row.article_original)))
-        text_token_counts.append(text_token_count)
+    # text_token_counts, summary_token_counts = [], []
+    # for row in tqdm(train.itertuples()):
+    #     text_token_count = len(tokenizer.encode(' '.join(row.article_original)))
+    #     text_token_counts.append(text_token_count)
         
-        summary_token_count = len(tokenizer.encode(row.abstractive))
-        summary_token_counts.append(text_token_count)
+    #     summary_token_count = len(tokenizer.encode(row.abstractive))
+    #     summary_token_counts.append(text_token_count)
         
     EPOCHS = 3
     BATCH_SIZE = 8

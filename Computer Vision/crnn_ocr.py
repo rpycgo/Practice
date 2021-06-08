@@ -1,9 +1,130 @@
-from tensorflow.keras import layers
-from keras.models import Sequential
-from keras.layers.convolutional import Conv2D
-from keras.layers.convolutional import MaxPooling2D
-from keras.layers import Dense
-from keras.layers import Flatten
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+from pathlib import Path
+from collections import Counter
+
+import tensorflow.keras.backend as K
+import tensorflow as tf
+from tensorflow.keras import layers, Input
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import (
+    Dense, 
+    Flatten, 
+    Conv2D, 
+    MaxPool2D, 
+    Reshape, 
+    BatchNormalization, 
+    Lambda, 
+    Bidirectional, 
+    LSTM
+    )
+
+
+
+######### data #########s
+#!curl -L0 https://github.com/AakashKumarNain/CaptchaCracker/raw/master/captcha_images_v2.zip
+#!unzip -qq captcha_images_v2.zip
+
+
+
+data_dir = Path('./captcha_images_v2/')
+images = sorted(list(map(str, list(data_dir.glob("*.png")))))
+labels = [img.split(os.path.sep)[-1].split(".png")[0] for img in images]
+characters = set(char for label in labels for char in label)
+
+print("Number of images found: ", len(images))
+print("Number of labels found: ", len(labels))
+print("Number of unique characters: ", len(characters))
+print("Characters present: ", characters)
+
+downsample_factor = 4
+max_length = max([len(label) for label in labels])
+
+
+# preprocessing
+char_to_num = layers.experimental.preprocessing.StringLookup(
+    vocabulary = list(characters), num_oov_indices = 0, mask_token = None
+)
+
+num_to_char = layers.experimental.preprocessing.StringLookup(
+    vocabulary=char_to_num.get_vocabulary(), mask_token = None, invert = True
+)
+
+
+
+def split_data(images, labels, train_size = 0.9, shuffle = True):
+    # 1. Get the total size of the dataset
+    size = len(images)
+    # 2. Make an indices array and shuffle it, if required
+    indices = np.arange(size)
+    if shuffle:
+        np.random.shuffle(indices)
+    # 3. Get the size of training samples
+    train_samples = int(size * train_size)
+    # 4. Split data into training and validation sets
+    x_train, y_train = images[indices[:train_samples]], labels[indices[:train_samples]]
+    x_valid, y_valid = images[indices[train_samples:]], labels[indices[train_samples:]]
+    return x_train, x_valid, y_train, y_valid
+
+
+# Splitting data into training and validation sets
+x_train, x_valid, y_train, y_valid = split_data(np.array(images), np.array(labels))
+
+
+def encode_single_sample(img_path, label):
+    # 1. Read image
+    img = tf.io.read_file(img_path)
+    # 2. Decode and convert to grayscale
+    img = tf.io.decode_png(img, channels = 1)
+    # 3. Convert to float32 in [0, 1] range
+    img = tf.image.convert_image_dtype(img, tf.float32)
+    # 4. Resize to the desired size
+    img = tf.image.resize(img, [img_height, img_width])
+    # 5. Transpose the image because we want the time
+    # dimension to correspond to the width of the image.
+    img = tf.transpose(img, perm = [1, 0, 2])
+    # 6. Map the characters in label to numbers
+    label = char_to_num(tf.strings.unicode_split(label, input_encoding = 'UTF-8'))
+    # 7. Return a dict as our model is expecting two inputs
+    return {'input_layer': img, 'label_input': label}
+
+
+
+train_dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+train_dataset = (
+    train_dataset.map(
+        encode_single_sample, num_parallel_calls=tf.data.experimental.AUTOTUNE
+    )
+    .batch(batch_size)
+    .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+)
+
+validation_dataset = tf.data.Dataset.from_tensor_slices((x_valid, y_valid))
+validation_dataset = (
+    validation_dataset.map(
+        encode_single_sample, num_parallel_calls=tf.data.experimental.AUTOTUNE
+    )
+    .batch(batch_size)
+    .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+)
+
+
+
+
+# visualize data
+_, ax = plt.subplots(4, 4, figsize = (10, 5))
+for batch in train_dataset.take(1):
+    images = batch['input_layer']
+    labels = batch['label_input']
+    for i in range(16):
+        img = (images[i] * 255).numpy().astype('uint8')
+        label = tf.strings.reduce_join(num_to_char(labels[i])).numpy().decode('utf-8')
+        ax[i // 4, i % 4].imshow(img[:, :, 0].T, cmap = 'gray')
+        ax[i // 4, i % 4].set_title(label)
+        ax[i // 4, i % 4].axis('off')
+plt.show()
 
 
 
@@ -11,9 +132,9 @@ from keras.layers import Flatten
 # refer: https://keras.io/examples/vision/captcha_ocr/
 class CTCLayer(layers.Layer):
     
-    def __init__(self, name=None):
-        super().__init__(name=name)
-        self.loss_fn = keras.backend.ctc_batch_cost
+    def __init__(self, name = None):
+        super().__init__(name = name)
+        self.loss_fn = tf.keras.backend.ctc_batch_cost
 
 
     def call(self, y_true, y_pred):
@@ -37,8 +158,9 @@ class CTCLayer(layers.Layer):
 class CRNNOCR:
     
     def __init__(self):
-        pass
-        #self.max_char 
+        
+        self.max_char_len = 19
+        
     
     def ctc_lambda_function(self, args):
         labels, y_pred, input_length, label_length = args
@@ -48,9 +170,8 @@ class CRNNOCR:
   
     def build_model(self):
         
-      
-        inputs = Inputs(shape = (32, 128, 1), name = 'input_layer')
-        labels = Input(shape=[self.max_char_len], name = 'label_input', dtype='float32')
+        inputs = Input(shape = (32, 128, 1), name = 'input_layer')
+        labels = Input(shape = (None, ), name = 'label_input', dtype = 'float32')
         
         convolution_layer_1 = Conv2D(
             filters = 64,
@@ -100,7 +221,7 @@ class CRNNOCR:
             kernel_size = (3, 3),
             strides = (1, 1),
             activation = 'relu',
-            name = 'convolution_layer_3_2'
+            name = 'convolution_layer_3_2',
             padding = 'same'
             )(convolution_layer_3_1)
           
@@ -115,7 +236,7 @@ class CRNNOCR:
         convolution_layer_4 = Conv2D(
             filters = 512, 
             kernel_size = (3, 3),
-            strides = (1, 1)
+            strides = (1, 1),
             activation = 'relu',
             padding = 'same',
             name = 'convolution_layer_4_1'
@@ -137,7 +258,7 @@ class CRNNOCR:
         batch_normalization_layer_2 = BatchNormalization(name = 'batch_normalization_layer_2')(convolution_layer_5)
           
         pooling_layer_4 = MaxPool2D(
-              pooling_size = (2, 2),
+              pool_size = (2, 2),
               strides = (2, 1),
               name = 'pooling_layer_4'
               )(batch_normalization_layer_2)
@@ -149,11 +270,13 @@ class CRNNOCR:
             kernel_size = (2, 2),
             strides = (1, 1),
             activation = 'relu',
-            padding = 'valid'
+            padding = 'valid',
             name = 'convolution_layer_6_1'
             )(pooling_layer_4)
           
-        squeezed = Lambda(lambda x: K.squeeze(x, 1), name = 'flatten_layer')(convolution_layer_6)
+        
+        
+        reshape_layer = Reshape((-1, 512), name = 'reshape_layer')(convolution_layer_6)
         
                   
         ######################################################################################################
@@ -165,7 +288,7 @@ class CRNNOCR:
               return_sequences = True,
               dropout = 0.2,
               name = 'bilstm_layer_1')
-            )(squeezed)
+            )(reshape_layer)
           
         bidirectional_lstm_layer_2 = Bidirectional(
             LSTM(
@@ -176,18 +299,11 @@ class CRNNOCR:
             )(bidirectional_lstm_layer_1)
         
         
-        outputs = Dense(units = len(char_list) + 1, activation = 'softmax', name = 'classification_layer_1')
-        
-        model_pred = Model(inputs, outputs)
-        
-        
-        if prediction_only:
-            return model_pred
-        
+        outputs = Dense(units = self.max_char_len + 1, activation = 'softmax', name = 'classification_layer_1')(bidirectional_lstm_layer_2)
         
         ctc_loss = CTCLayer(name = 'ctc_loss')(labels, outputs)
         
-        model_train = Model(inputs = [inputs, labels, input_length, label_length], outputs = ctc_loss)
+        model = Model(inputs = [inputs, labels], outputs = ctc_loss)
         
-        return model_train, model_pred
+        return model
         

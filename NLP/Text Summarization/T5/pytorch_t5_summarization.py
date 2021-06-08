@@ -25,7 +25,7 @@ from sklearn.model_selection import train_test_split
 from transformers import (
     AdamW,
     MT5ForConditionalGeneration,
-    T5TokenizerFast as T5Tokenizer    
+    T5TokenizerFast as T5Tokenizer
 )
 
 
@@ -69,7 +69,10 @@ class NewsSummaryDataset(Dataset):
     
     def __getitem__(self, index: int):
         
-        data_row = self.data.iloc[index]
+        try:
+            data_row = self.data.iloc[index]
+        except Exception as e:
+            print(e)
         
         original_article = ' '.join(data_row['article_original'])
         
@@ -180,7 +183,7 @@ class NewsSummaryModel(pl.LightningModule):
     
     def __init__(self):
         super().__init__()
-        self.model = MT5ForConditionalGeneration.from_pretrained('google/mt5-base', return_dict = True)
+        self.model = MT5ForConditionalGeneration.from_pretrained('google/mt5-base', return_dict = True, max_length = 512)
         
         
     def forward(self, input_ids, attention_mask, decoder_attention_mask, labels = None):
@@ -195,7 +198,7 @@ class NewsSummaryModel(pl.LightningModule):
         return output.loss, output.logits
     
     
-    def training_step(self, batch, batch_index):
+    def training_step(self, batch, batch_idx):
         input_ids = batch['text_input_ids']
         attention_mask = batch['text_attention_mask']
         labels = batch['labels']
@@ -205,41 +208,44 @@ class NewsSummaryModel(pl.LightningModule):
             input_ids = input_ids,
             attention_mask = attention_mask,
             decoder_attention_mask = labels_attention_mask,
-            labels = labels)
+            labels = labels
+            )
         
         self.log('train_loss', loss, prog_bar = True, logger = True)
         
         return loss
     
     
-    def validation_step(self, batch, batch_index):
+    def validation_step(self, batch, batch_idx):
         input_ids = batch['text_input_ids']
         attention_mask = batch['text_attention_mask']
         labels = batch['labels']
         labels_attention_mask = batch['labels_attention_mask']
         
-        loss, outputs = self.model(
+        loss, outputs = self(
             input_ids = input_ids,
             attention_mask = attention_mask,
             decoder_attention_mask = labels_attention_mask,
-            labels = labels)
+            labels = labels
+            )
         
         self.log('val_loss', loss, prog_bar = True, logger = True)
         
         return loss
     
     
-    def test_step(self, batch, batch_index):
+    def test_step(self, batch, batch_idx):
         input_ids = batch['text_input_ids']
         attention_mask = batch['text_attention_mask']
         labels = batch['labels']
         labels_attention_mask = batch['labels_attention_mask']
         
-        loss, outputs = self.model(
+        loss, outputs = self(
             input_ids = input_ids,
             attention_mask = attention_mask,
             decoder_attention_mask = labels_attention_mask,
-            labels = labels)
+            labels = labels
+            )
         
         self.log('test_loss', loss, prog_bar = True, logger = True)
         
@@ -293,8 +299,9 @@ if __name__ == '__main__':
     EPOCHS = 3
     BATCH_SIZE = 8
     
-    data_module = NewsSummaryDataModule(train, test, tokenizer, batch_size = BATCH_SIZE)
-    
+    data_module = NewsSummaryDataModule(train, test, tokenizer, batch_size = BATCH_SIZE)    
+    data_module.train_dataset = NewsSummaryDataset(train, tokenizer, 512, 196)    
+    data_module.test_dataset = NewsSummaryDataset(test, tokenizer, 512, 196)
     model = NewsSummaryModel()
     
     checkpoint_callback = ModelCheckpoint(
@@ -312,7 +319,7 @@ if __name__ == '__main__':
         logger = logger,
         checkpoint_callback = checkpoint_callback,
         max_epochs = EPOCHS,
-        progress_bar_refresh_rate = 30
+        #progress_bar_refresh_rate = 30
         )
     
     trainer.fit(model, data_module)

@@ -1,9 +1,36 @@
+from tensorflow.keras import layers
 from keras.models import Sequential
 from keras.layers.convolutional import Conv2D
 from keras.layers.convolutional import MaxPooling2D
 from keras.layers import Dense
 from keras.layers import Flatten
 
+
+
+
+# refer: https://keras.io/examples/vision/captcha_ocr/
+class CTCLayer(layers.Layer):
+    
+    def __init__(self, name=None):
+        super().__init__(name=name)
+        self.loss_fn = keras.backend.ctc_batch_cost
+
+
+    def call(self, y_true, y_pred):
+        # Compute the training-time loss value and add it
+        # to the layer using `self.add_loss()`.
+        batch_len = tf.cast(tf.shape(y_true)[0], dtype="int64")
+        input_length = tf.cast(tf.shape(y_pred)[1], dtype="int64")
+        label_length = tf.cast(tf.shape(y_true)[1], dtype="int64")
+
+        input_length = input_length * tf.ones(shape=(batch_len, 1), dtype="int64")
+        label_length = label_length * tf.ones(shape=(batch_len, 1), dtype="int64")
+
+        loss = self.loss_fn(y_true, y_pred, input_length, label_length)
+        self.add_loss(loss)
+
+        # At test time, just return the computed predictions
+        return y_pred
 
 
 
@@ -23,7 +50,7 @@ class CRNNOCR:
         
       
         inputs = Inputs(shape = (32, 128, 1), name = 'input_layer')
-        
+        labels = Input(shape=[self.max_char_len], name = 'label_input', dtype='float32')
         
         convolution_layer_1 = Conv2D(
             filters = 64,
@@ -151,21 +178,16 @@ class CRNNOCR:
         
         outputs = Dense(units = len(char_list) + 1, activation = 'softmax', name = 'classification_layer_1')
         
-        model = Model(inputs, outputs)
+        model_pred = Model(inputs, outputs)
         
         
         if prediction_only:
             return model_pred
         
         
-        labels = Input(name = 'label_input', shape = [self.mar_char_len], dtype = 'float32')
-        input_length = Input(name = 'input_length', shape = [1], dtype = 'int64')
-        label_length = Input(name = 'label_length', shape = [1], dtype = 'int64')
-        
-        
-        ctc_loss = Lambda(self.ctc_lambda_function, output_shape = (1,), name = 'ctc_layer')([labels, outputs, input_length, label_length])
+        ctc_loss = CTCLayer(name = 'ctc_loss')(labels, outputs)
         
         model_train = Model(inputs = [inputs, labels, input_length, label_length], outputs = ctc_loss)
         
-        return model_train, modeL_pred
+        return model_train, model_pred
         

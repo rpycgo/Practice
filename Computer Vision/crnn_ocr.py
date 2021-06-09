@@ -21,7 +21,9 @@ from tensorflow.keras.layers import (
     Lambda, 
     Bidirectional, 
     LSTM,
-    Concatenate
+    Concatenate,
+    Dropout,
+    LayerNormalization
     )
 
 
@@ -179,7 +181,7 @@ class CRNNOCR:
           
         
         
-        # reshape_layer = Reshape((-1, 512), name = 'reshape_layer')(convolution_layer_6)
+        reshape_layer = Reshape((-1, 512), name = 'reshape_layer')(convolution_layer_6)
         
                   
         # ######################################################################################################
@@ -203,18 +205,27 @@ class CRNNOCR:
         #     )(bidirectional_lstm_layer_1)
         
         multi_head_attention_layer = MultiHeadAttention(d_model = 512, num_heads = 8, name = 'multi_head_attention_layer')(
-            {'query': convolution_layer_6,
-             'key': convolution_layer_6,
-             'value': convolution_layer_6
-             }
+            {'query': reshape_layer,
+              'key': reshape_layer,
+              'value': reshape_layer
+              }
             )
         
         
-        outputs = Dense(units = self.max_char_len + 1, activation = 'softmax', name = 'classification_layer')(multi_head_attention_layer)
+        dropout_layer_1 = Dropout(rate = 0.5, name = 'dropout_layer_1')(multi_head_attention_layer)
+        residual_layer_1 = LayerNormalization(epsilon = 1e-6, name = 'layer_normalization_layer_1')(multi_head_attention_layer + dropout_layer_1)
         
+        ffnn_1 = Dense(units = 2048, activation = 'relu', name = 'ffnn_layer_1')(residual_layer_1)
+        ffnn_2 = Dense(units = 512, activation = 'relu', name = 'ffnn_layer_2')(ffnn_1)
+        
+        dropout_layer_2 = Dropout(rate = 0.5, name = 'dropout_layer_2')(ffnn_2)
+        residual_layer_2 = LayerNormalization(epsilon = 1e-6, name = 'layer_normalization_layer_2')(residual_layer_1 + ffnn_2)
+ 
+        outputs = Dense(units = self.max_char_len + 1, activation = 'softmax', name = 'classification_layer')(reshape_layer_2)        
         ctc_loss = CTCLayer(name = 'ctc_loss')(labels, outputs)
         
         model = Model(inputs = [inputs, labels], outputs = ctc_loss)
+        model.compile(optimizer = tf.keras.optimizers.Adam())
         
         return model
     

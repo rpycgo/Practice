@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.metrics.functional import cross_entropy
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from transformers import BertConfig, BertTokenizer, BertForSequenceClassification
@@ -360,9 +360,18 @@ if __name__ == '__main__':
 
     logger = TensorBoardLogger('lightning_logs', name = 'finbert_sentiment')
     
+    early_stop_callback = EarlyStopping(
+       monitor = 'val_loss',
+       min_delta = 0.00,
+       patience = 2,
+       verbose = True,
+       mode = 'max'
+    )
+    
     trainer = pl.Trainer(
         logger = logger,
         checkpoint_callback = checkpoint_callback,
+        callbacks = [early_stop_callback]
         max_epochs = EPOCHS,
         progress_bar_refresh_rate = 30
         )

@@ -313,7 +313,7 @@ if __name__ == '__main__':
     data_module = NewsSummaryDataModule(train, test, tokenizer, batch_size = BATCH_SIZE)    
     data_module.train_dataset = NewsSummaryDataset(train, tokenizer, 512, 196)    
     data_module.test_dataset = NewsSummaryDataset(test, tokenizer, 512, 196)
-    model = NewsSummaryModel()
+    summarize_model = NewsSummaryModel()
     
     checkpoint_callback = ModelCheckpoint(
         dirpath = 'checkpoints',
@@ -333,4 +333,4 @@ if __name__ == '__main__':
         #progress_bar_refresh_rate = 30
         )
     
-    trainer.fit(model, data_module)
+    trainer.fit(summarize_model, data_module)

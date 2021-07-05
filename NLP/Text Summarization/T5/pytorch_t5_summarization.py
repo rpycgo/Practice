@@ -280,7 +280,11 @@ def summarize(text):
         early_stopping = True
         )
     
+    predicted_text = [
+        tokenizer.decode(generation_id, skip_special_tokens = True, clean_up_tokenization_spaces = True) for generation_id in generated_ids
+        ]
     
+    return ''.join(predicted_text)
 
 
 

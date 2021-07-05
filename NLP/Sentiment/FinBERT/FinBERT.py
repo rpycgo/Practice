@@ -7,14 +7,16 @@ Created on Thu Jul  1 09:40:18 2021
 
 import pandas as pd
 import re
-import tensorflow as tf
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.metrics.functional import cross_entropy
 from torch.utils.data import Dataset, DataLoader
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from transformers import BertConfig, BertTokenizer, BertModel
+from sklearn.model_selection import train_test_split
+from transformers import BertConfig, BertTokenizer, BertForSequenceClassification
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 
@@ -63,12 +65,11 @@ class FinancialPhraseBankDataset(Dataset):
             return_tensors = 'pt'
             )
         
-       
         return dict(
-            input_ids = encoded_text.input_ids,
-            attention_mask = encoded_text.attention_mask,
-            token_type_ids = encoded_text.token_type_ids,
-            label = [data_row.sentiment]
+            input_ids = encoded_text.input_ids.flatten(),
+            attention_mask = encoded_text.attention_mask.flatten(),
+            token_type_ids = encoded_text.token_type_ids.flatten(),
+            label = torch.tensor(data_row.sentiment).unsqueeze(0)
             )
     
     
@@ -80,7 +81,7 @@ class FinancialPhraseBankDataModule(pl.LightningDataModule):
         train_df: pd.DataFrame,
         test_df: pd.DataFrame,
         tokenizer: BertTokenizer,
-        batch_size: int = 32,
+        batch_size: int = 64,
         text_max_token_length: int = 512,
     ):
         
@@ -95,6 +96,10 @@ class FinancialPhraseBankDataModule(pl.LightningDataModule):
         
         self.setup()
         
+        
+    def __len__(self):
+        return len(self.train_df)
+        
 
 
     def setup(self, stage = None):
@@ -102,14 +107,12 @@ class FinancialPhraseBankDataModule(pl.LightningDataModule):
             self.train_df,
             self.tokenizer,
             self.text_max_token_length,
-            self.summary_max_token_length
             )
         
         self.test_dataset = FinancialPhraseBankDataset(
             self.test_df,
             self.tokenizer,
             self.text_max_token_length,
-            self.summary_max_token_length
             )
     
     
@@ -141,49 +144,187 @@ class FinancialPhraseBankDataModule(pl.LightningDataModule):
 
 class FinBERT(pl.LightningModule):
     
-    def __init__(self):
+    def __init__(self, train_samples, batch_size, epochs, num_labels, learning_rate = 2e-5, discriminative_fine_tuning_rate = 1.2):
         super().__init__()
+    
+        self.learning_rate = learning_rate
+        self.discriminative_fine_tuning_rate = discriminative_fine_tuning_rate
+        self.train_samples = train_samples
+        self.batch_size = batch_size
+        self.gradient_accumulation_steps = 1
+        self.epochs = epochs
+        self.warm_up_proportion = 0.1
+        self.num_train_optimization_steps = int(self.train_samples / self.batch_size / self.gradient_accumulation_steps) * epochs
+        self.num_warmup_steps = int(float(self.num_train_optimization_steps) * self.warm_up_proportion)
+
+
+        self.no_decay_layer_list = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+
         config = BertConfig.from_pretrained('bert-base-uncased', output_hidden_states = True)
-        self.bert_model = BertModel.from_pretrained('model', config = config)
+        config.num_labels = num_labels
+        self.bert_model = BertForSequenceClassification.from_pretrained('model', config = config)
+        
+        self.optimizer_grouped_parameters = self.get_optimizer_grouped_parameters()
+        
+        self.criterion = nn.CrossEntropyLoss()
         
         
-    def forward(self, input_ids, attention_mask, segments, labels = None):        
+    def forward(self, input_ids, attention_mask, token_type_ids, labels = None):        
         output = self.bert_model(
             input_ids,
             attention_mask = attention_mask,
-            token_type_ids = token_type_ids
+            token_type_ids = token_type_ids,
+            labels = labels
             )
-        
+         
         return output.loss, output.logits
     
     
-    def training_setp(self, batch, batch_index):
+    def get_optimizer_grouped_parameters(self):
+        
+        discriminative_fine_tuning_encoders = []
+        for i in range(12):
+            ith_layer = list(self.bert_model.bert.encoder.layer[i].named_parameters())
+            
+            encoder_decay = {
+                'params': [param for name, param in ith_layer if
+                           not any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+                'weight_decay': 0.01,
+                'lr': self.learning_rate / (self.discriminative_fine_tuning_rate ** (12 - i))
+                }
+        
+            encoder_nodecay = {
+                'params': [param for name, param in ith_layer if
+                           any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+                'weight_decay': 0.0,
+                'lr': self.learning_rate / (self.discriminative_fine_tuning_rate ** (12 - i))}
+            
+            discriminative_fine_tuning_encoders.append(encoder_decay)
+            discriminative_fine_tuning_encoders.append(encoder_nodecay)
+            
+        
+        embedding_layer = self.bert_model.bert.embeddings.named_parameters()
+        pooler_layer = self.bert_model.bert.pooler.named_parameters()
+        classifier_layer = self.bert_model.classifier.named_parameters()
+        
+        optimizer_grouped_parameters = [
+            {'params': [param for name, param in embedding_layer if
+                        not any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+             'weight_decay': 0.01,
+             'lr': self.learning_rate / (self.discriminative_fine_tuning_rate ** 13)},
+            {'params': [param for name, param in embedding_layer if
+                        any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+             'weight_decay': 0.0,
+             'lr': self.learning_rate / (self.discriminative_fine_tuning_rate ** 13)},
+            {'params': [param for name, param in pooler_layer if
+                        not any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+             'weight_decay': 0.01,
+             'lr': self.learning_rate},
+            {'params': [param for name, param in pooler_layer if
+                        any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+             'weight_decay': 0.0,
+             'lr': self.learning_rate},
+            {'params': [param for name, param in classifier_layer if
+                        not any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+             'weight_decay': 0.01,
+             'lr': self.learning_rate},
+            {'params': [param for name, param in classifier_layer if
+                        any(no_decay_layer_name in name for no_decay_layer_name in self.no_decay_layer_list)],
+             'weight_decay': 0.0,
+             'lr': self.learning_rate}            
+            ]
+                
+        optimizer_grouped_parameters.extend(discriminative_fine_tuning_encoders)
+        
+        return optimizer_grouped_parameters
+    
+    
+    def training_step(self, batch, batch_index):
         input_ids = batch['input_ids']
         attention_mask = batch['attention_mask']
         token_type_ids = batch['token_type_ids']
-        labels_attention_mask = batch['labels_attention_mask']
+        label = batch['label']
         
-        loss, outputs = self(
+        loss, logits = self(
             input_ids = input_ids,
             attention_mask = attention_mask,
-            token_type_ids = token_type_ids)
+            token_type_ids = token_type_ids,
+            labels = label
+            )
+        
+        total = label.size(0)        
+        pred = torch.argmax(logits, 1).unsqueeze(1)
+        correct = (pred == label).sum().item()
+        acc = correct/total
+
         
         self.log('train_loss', loss, prog_bar = True, logger = True)
+        self.log('train_acc', acc, prog_bar = True, logger = True)
+        
+        return loss
+    
+    
+    def validation_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        token_type_ids = batch['token_type_ids']
+        label = batch['label']
+
+        
+        loss, logits = self(
+            input_ids = input_ids,
+            attention_mask = attention_mask,
+            token_type_ids = token_type_ids,
+            labels = label
+            )
+        
+        total = label.size(0)        
+        pred = torch.argmax(logits, 1).unsqueeze(1)
+        correct = (pred == label).sum().item()
+        acc = correct/total
+
+        self.log('acc', acc, prog_bar = True, logger = True)
+        self.log('val_loss', loss, prog_bar = True, logger = True)
+        
+        return loss
+    
+    
+    def test_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        token_type_ids = batch['token_type_ids']        
+        label = batch['label']
+
+        loss, logits = self(
+            input_ids = input_ids,
+            attention_mask = attention_mask,
+            token_type_ids = token_type_ids,
+            labels = label
+            )
+        
+        total = label.size(0)        
+        pred = torch.argmax(logits, 1).unsqueeze(1)
+        correct = (pred == label).sum().item()
+        acc = correct/total
+        
+        self.log('test_acc', acc, prog_bar = True, logger = True)
+        self.log('test_loss', loss, prog_bar = True, logger = True)
         
         return loss
     
     
     def configure_optimizers(self):
+        
         optimizer = AdamW(
-            optimizer_grouped_parameters,
-            lr = lr,
+            self.optimizer_grouped_parameters,
+            lr = self.learning_rate,
             correct_bias = False
             )
 
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
-            num_warmup_steps = num_warmup_steps,
-            num_training_steps = num_train_optimization_steps
+            num_warmup_steps = self.num_warmup_steps,
+            num_training_steps = self.num_train_optimization_steps
             )
         
         return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
@@ -191,91 +332,39 @@ class FinBERT(pl.LightningModule):
 
       
     
-    
-        
-
-
-
-MAX_LEN = 512
-
-
-input_ids = Input(shape = MAX_LEN, dtype = 'int32', name = 'input_ids')
-input_masks = Input(shape = MAX_LEN, dtype = 'int32', name = 'input_masks')
-input_segments = Input(shape = MAX_LEN, dtype = 'int32', name = 'input_segments')
-
-
-
-bert_output = bert_model([input_ids, input_masks, input_segments])
-bert_model(input_ids)
-Model([input_ids, input_masks, input_segments])
-
-
-
-lr = 2e-5
-dft_rate = 1.2
-
-no_decay_layer_list = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-
-dft_encoders = []
-for i in range(12):
-    ith_layer = list(bert_model.encoder.layer[i].named_parameters())
-    
-    encoder_decay = {
-        'params': [param for name, param in ith_layer if
-                   not any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
-        'weight_decay': 0.01,
-        'lr': lr / (dft_rate ** (12 - i))
-        }
-
-    encoder_nodecay = {
-        'params': [param for name, param in ith_layer if
-                   any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
-        'weight_decay': 0.0,
-        'lr': lr / (dft_rate ** (12 - i))}
-    
-    dft_encoders.append(encoder_decay)
-    dft_encoders.append(encoder_nodecay)
-    
-    
-
-
-embedding_layer = bert_model.embeddings.named_parameters()
-pooler_layer = bert_model.pooler.named_parameters()
-
-optimizer_grouped_parameters = [
-    {'params': [param for name, param in embedding_layer if
-                not any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
-     'weight_decay': 0.01,
-     'lr': lr / (dft_rate ** 13)},
-    {'params': [param for name, param in embedding_layer if
-                any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
-     'weight_decay': 0.0,
-     'lr': lr / (dft_rate ** 13)},
-    {'params': [param for name, param in pooler_layer if
-                not any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
-     'weight_decay': 0.01,
-     'lr': lr},
-    {'params': [param for name, param in pooler_layer if
-                any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
-     'weight_decay': 0.0,
-     'lr': lr}
-    ]
-
-
-optimizer_grouped_parameters.extend(dft_encoders)
-
-
-examples = '4000'
-train_batch_size = 32
-gradient_accumulation_steps = 1
-num_train_epochs=10.0
-warm_up_proportion = 0.1
-num_train_optimization_steps = int(len(examples) / train_batch_size / gradient_accumulation_steps) * num_train_epochs
-num_warmup_steps = int(float(num_train_optimization_steps) * warm_up_proportion)
 
 if __name__ == '__main__':
     
     financial_phrase_dataset = pd.read_csv('dataset/financial_phrase_bank/all-data.csv', encoding = 'latin-1', names = ['sentiment', 'phrase']).drop_duplicates().dropna().reset_index(drop = True)
     financial_phrase_dataset.sentiment = financial_phrase_dataset.sentiment.apply(lambda x: categorizer(x))
+    train, test = train_test_split(financial_phrase_dataset, test_size = 0.3, shuffle = True)
+    
     
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    
+    EPOCHS = 10
+    BATCH_SIZE = 32
+    NUM_LABELS = 3
+    
+    data_module = FinancialPhraseBankDataModule(train, test, tokenizer, batch_size = BATCH_SIZE)    
+    model = FinBERT(train_samples = len(data_module), batch_size = BATCH_SIZE, epochs = EPOCHS, num_labels = NUM_LABELS)
+    
+    checkpoint_callback = ModelCheckpoint(
+        dirpath = 'checkpoints',
+        filename = 'best-checkpoint',
+        save_top_k = 1,
+        verbose = True,
+        monitor = 'val_loss',
+        mode = 'min'
+        )
+
+    logger = TensorBoardLogger('lightning_logs', name = 'finbert_sentiment')
+    
+    trainer = pl.Trainer(
+        logger = logger,
+        checkpoint_callback = checkpoint_callback,
+        max_epochs = EPOCHS,
+        progress_bar_refresh_rate = 30
+        )
+    
+    trainer.fit(model, data_module)

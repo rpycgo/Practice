@@ -283,7 +283,7 @@ class FinBERT(pl.LightningModule):
         correct = (pred == label).sum().item()
         acc = correct/total
 
-        self.log('acc', acc, prog_bar = True, logger = True)
+        self.log('val_acc', acc, prog_bar = True, logger = True)
         self.log('val_loss', loss, prog_bar = True, logger = True)
         
         return loss

@@ -29,6 +29,32 @@ def categorizer(label):
         return 1
     elif label == 'negative':
         return 0
+    
+    
+    
+
+def get_sentiment(sentiment_model, text, tokenizer):
+    
+    encoded_text = tokenizer.encode_plus(
+        text,
+        max_length = 512,
+        padding = 'max_length',
+        truncation = True,
+        return_attention_mask = True,
+        add_special_tokens = True,
+        return_tensors = 'pt'
+        )
+    
+    logit_output = sentiment_model(
+        input_ids = encoded_text.input_ids.flatten().unsqueeze(0),
+        attention_mask = encoded_text.attention_mask.flatten().unsqueeze(0),
+        token_type_ids = encoded_text.token_type_ids.flatten().unsqueeze(0)
+        )[-1]
+    
+    predicted_sentiment = torch.argmax(logit_output, 1)
+    
+    return predicted_sentiment
+
 
 
 
@@ -144,7 +170,7 @@ class FinancialPhraseBankDataModule(pl.LightningDataModule):
 
 class FinBERT(pl.LightningModule):
     
-    def __init__(self, train_samples, batch_size, epochs, num_labels, learning_rate = 2e-5, discriminative_fine_tuning_rate = 1.2):
+    def __init__(self, train_samples = 3388, batch_size = 64 , epochs = 10, num_labels = 3, learning_rate = 2e-5, discriminative_fine_tuning_rate = 1.2):
         super().__init__()
     
         self.learning_rate = learning_rate
@@ -328,11 +354,9 @@ class FinBERT(pl.LightningModule):
             )
         
         return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
-
-
-      
     
-
+    
+    
 if __name__ == '__main__':
     
     financial_phrase_dataset = pd.read_csv('dataset/financial_phrase_bank/all-data.csv', encoding = 'latin-1', names = ['sentiment', 'phrase']).drop_duplicates().dropna().reset_index(drop = True)
@@ -360,20 +384,34 @@ if __name__ == '__main__':
 
     logger = TensorBoardLogger('lightning_logs', name = 'finbert_sentiment')
     
-    early_stop_callback = EarlyStopping(
-       monitor = 'val_loss',
-       min_delta = 0.00,
-       patience = 2,
-       verbose = True,
-       mode = 'max'
-    )
+    # early_stop_callback = EarlyStopping(
+    #    monitor = 'val_loss',
+    #    min_delta = 0.00,
+    #    patience = 2,
+    #    verbose = True,
+    #    mode = 'min'
+    # )
     
     trainer = pl.Trainer(
         logger = logger,
         checkpoint_callback = checkpoint_callback,
-        callbacks = [early_stop_callback]
+        # callbacks = [early_stop_callback]
         max_epochs = EPOCHS,
         progress_bar_refresh_rate = 30
         )
     
     trainer.fit(model, data_module)
+    
+    
+    
+    sentiment_model = FinBERT.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+    sentiment_model.freeze()
+    
+    get_sentiment(sentiment_model, text, tokenizer)
+    
+    
+
+
+      
+    
+

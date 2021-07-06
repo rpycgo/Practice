@@ -170,7 +170,7 @@ class FinancialPhraseBankDataModule(pl.LightningDataModule):
 
 class FinBERT(pl.LightningModule):
     
-    def __init__(self, train_samples = 3388, batch_size = 64 , epochs = 10, num_labels = 3, learning_rate = 2e-5, discriminative_fine_tuning_rate = 1.2):
+    def __init__(self, train_samples = 3388, batch_size = 64 , epochs = 10, num_labels = 3, learning_rate = 2e-5, discriminative_fine_tuning_rate = 0.85):
         super().__init__()
     
         self.learning_rate = learning_rate
@@ -179,7 +179,7 @@ class FinBERT(pl.LightningModule):
         self.batch_size = batch_size
         self.gradient_accumulation_steps = 1
         self.epochs = epochs
-        self.warm_up_proportion = 0.1
+        self.warm_up_proportion = 0.2
         self.num_train_optimization_steps = int(self.train_samples / self.batch_size / self.gradient_accumulation_steps) * epochs
         self.num_warmup_steps = int(float(self.num_train_optimization_steps) * self.warm_up_proportion)
 

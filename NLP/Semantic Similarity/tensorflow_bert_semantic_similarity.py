@@ -33,6 +33,26 @@ def categorizer(label):
         return 0
     
     
+def get_similarity(sentence1, sentence2):
+    
+    sentence_pairs = np.array([[str(sentence1), str(sentence2)]])
+    test_data = BertSemanticDataGenerator(
+        sentence_pairs, 
+        labels = None, 
+        batch_size = 1, 
+        shuffle = False, 
+        include_targets = False
+    )
+
+    proba = model.predict(test_data)[0]
+    idx = np.argmax(proba)
+    proba = f"{proba[idx]: .2f}%"
+    pred = labels[idx]
+    
+    return pred, proba
+    
+    
+    
     
 def build_model(max_length):
 
@@ -56,18 +76,19 @@ def build_model(max_length):
         # Freeze the BERT model to reuse the pretrained features without modifying them.
         bert_model.trainable = False
     
-        sequence_output, pooled_output = bert_model([input_ids, attention_mask token_type_ids])
+        outputs = bert_model([input_ids, attention_masks, token_type_ids])
+        sequence_output, _ = outputs.last_hidden_state, outputs.pooler_output
         # Add trainable layers on top of frozen layers to adapt the pretrained features on the new data.
         bi_lstm = Bidirectional(
             LSTM(units = 64, return_sequences = True)
         )(sequence_output)
         # Applying hybrid pooling approach to bi_lstm sequence output.
-        avg_pool = tf.keras.layers.GlobalAveragePooling1D()(bi_lstm)
-        max_pool = tf.keras.layers.GlobalMaxPooling1D()(bi_lstm)
-        concat = tf.keras.layers.concatenate([avg_pool, max_pool])
-        dropout = tf.keras.layers.Dropout(rate = 0.3)(concat)
-        output = tf.keras.layers.Dense(units = 3, activation = 'softmax')(dropout)
-        model = tf.keras.models.Model(
+        avg_pool = GlobalAveragePooling1D()(bi_lstm)
+        max_pool = GlobalMaxPooling1D()(bi_lstm)
+        concat = concatenate([avg_pool, max_pool])
+        dropout = Dropout(rate = 0.3)(concat)
+        output = Dense(units = 3, activation = 'softmax')(dropout)
+        model = Model(
             inputs = [input_ids, attention_masks, token_type_ids], 
             outputs = output
         )
@@ -177,12 +198,57 @@ class BertSemanticDataGenerator(Sequence):
 
 if __name__ == '__main__':
     
-    dataset = pd.read_csv(r'C:\etc\code\Practice\NLP\Semantic Similarity\dataset\multinli.train.ko.tsv.txt', sep = '\t', error_bad_lines = False, nrows = 1000).dropna().reset_index(drop = True)
-    dataset.gold_label = dataset.gold_label.apply(lambda x: categorizer(x))
-    y_train = tf.keras.utils.to_categorical(dataset.gold_label, num_classes = 3)
+    train_dataset = pd.read_csv(r'C:\etc\code\Practice\NLP\Semantic Similarity\dataset\multinli.train.ko.tsv.txt', sep = '\t', error_bad_lines = False, nrows = 1000).dropna().reset_index(drop = True)    
+    train_dataset.gold_label = train_dataset.gold_label.apply(lambda x: categorizer(x))
+    y_train = to_categorical(train_dataset.gold_label, num_classes = 3)
     train_data = BertSemanticDataGenerator(
-        dataset[['sentence1', 'sentence2']].values.astype('str'), 
+        train_dataset[['sentence1', 'sentence2']].values.astype('str'), 
         y_train, 
         batch_size = 32, 
         max_len = 128,
-        shuffle = True)
+        shuffle = True
+        )
+    
+    valid_dataset = pd.read_csv(r'C:\etc\code\Practice\NLP\Semantic Similarity\dataset\xnli.test.ko.tsv.txt', sep = '\t', error_bad_lines = False).dropna().reset_index(drop = True)
+    valid_dataset.gold_label = valid_dataset.gold_label.apply(lambda x: categorizer(x))
+    y_valid = to_categorical(valid_dataset.gold_label, num_classes = 3)
+    valid_data = BertSemanticDataGenerator(
+        valid_dataset[['sentence1', 'sentence2']].values.astype('str'), 
+        y_valid, 
+        batch_size = 32, 
+        max_len = 128,
+        shuffle = True
+        )
+    
+   
+    EPOCHS = 10
+    labels = ['contradiction', 'neutral', 'entailment']
+    model = build_model(max_length = 128)
+    # feature extraction
+    history = model.fit(
+        train_data,
+        validation_data = valid_data,
+        epochs = EPOCHS,
+        use_multiprocessing = True,
+        workers = -1
+        )
+    
+    
+    # fine-tuning
+    model.trainable = True
+    model.compile(
+        optimizer = Adam(),
+        loss = 'categorical_crossentropy',
+        metrics = ['accuracy']
+        )
+    
+    model.summary()
+    
+    history = model.fit(        
+        train_data,
+        validation_data = valid_data,
+        epochs = EPOCHS,
+        use_multiprocessing = True,
+        workers = -1        
+        )
+    

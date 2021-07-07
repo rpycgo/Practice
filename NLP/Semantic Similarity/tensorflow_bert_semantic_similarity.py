@@ -217,7 +217,7 @@ if __name__ == '__main__':
         y_valid, 
         batch_size = 32, 
         max_len = 128,
-        shuffle = True
+        shuffle = False
         )
     
    

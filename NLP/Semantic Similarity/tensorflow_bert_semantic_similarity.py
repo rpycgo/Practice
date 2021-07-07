@@ -15,7 +15,7 @@ import tensorflow as tf
 
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Bidirectional, LSTM, GlobalAveragePooling1D, GlobalMaxPooling1D, concatenate, Dropout, Dense
-from tensorflow.keras.utils import Sequence, to_categorical
+from tensorflow.keras.utils import Sequence, to_categorical, EarlyStopping
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.optimizers import Adam
 from transformers import BertTokenizer
@@ -221,16 +221,23 @@ if __name__ == '__main__':
         )
     
    
-    EPOCHS = 10
+    EPOCHS = 20
     labels = ['contradiction', 'neutral', 'entailment']
     model = build_model(max_length = 128)
+    early_stopping = EarlyStopping(
+        monitor = 'val_loss',
+        mode = 'min',
+        verbose = 1,
+        patience = 3
+        )
     # feature extraction
     history = model.fit(
         train_data,
         validation_data = valid_data,
         epochs = EPOCHS,
         use_multiprocessing = True,
-        workers = -1
+        workers = -1,
+        callbacks = [early_stopping]
         )
     
     
@@ -249,6 +256,7 @@ if __name__ == '__main__':
         validation_data = valid_data,
         epochs = EPOCHS,
         use_multiprocessing = True,
-        workers = -1        
+        workers = -1,
+        callbacks = [early_stopping]     
         )
     

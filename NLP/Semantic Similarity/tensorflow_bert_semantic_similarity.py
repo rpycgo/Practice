@@ -63,7 +63,7 @@ def build_model(max_length):
         input_ids = Input(
             shape = (max_length, ), dtype = tf.int32, name = 'input_ids'
         )
-        attention_masks = tf.keras.layers.Input(
+        attention_mask = tf.keras.layers.Input(
             shape = (max_length, ), dtype = tf.int32, name = 'attention_masks'
         )
         token_type_ids = tf.keras.layers.Input(
@@ -76,7 +76,7 @@ def build_model(max_length):
         # Freeze the BERT model to reuse the pretrained features without modifying them.
         bert_model.trainable = False
     
-        outputs = bert_model([input_ids, attention_masks, token_type_ids])
+        outputs = bert_model(input_ids = input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids)
         sequence_output, _ = outputs.last_hidden_state, outputs.pooler_output
         # Add trainable layers on top of frozen layers to adapt the pretrained features on the new data.
         bi_lstm = Bidirectional(
@@ -89,14 +89,14 @@ def build_model(max_length):
         dropout = Dropout(rate = 0.3)(concat)
         output = Dense(units = 3, activation = 'softmax')(dropout)
         model = Model(
-            inputs = [input_ids, attention_masks, token_type_ids], 
+            inputs = [input_ids, attention_mask, token_type_ids], 
             outputs = output
         )
     
         model.compile(
             optimizer = Adam(),
             loss = 'categorical_crossentropy',
-            metrics = ['acc'],
+            metrics = ['accuracy'],
         )
 
         model.summary()
@@ -179,7 +179,7 @@ class BertSemanticDataGenerator(Sequence):
 
         # Set to true if data generator is used for training/validation.
         if self.include_targets:
-            labels = np.array(self.labels[indexes], dtype="int32")
+            labels = np.array(self.labels[indexes], dtype = 'int32')
             return self.get_batch_bert_input_data(sentence_pairs), labels
         else:
             return self.get_batch_bert_input_data(sentence_pairs)
@@ -198,7 +198,7 @@ class BertSemanticDataGenerator(Sequence):
 
 if __name__ == '__main__':
     
-    train_dataset = pd.read_csv(r'C:\etc\code\Practice\NLP\Semantic Similarity\dataset\multinli.train.ko.tsv.txt', sep = '\t', error_bad_lines = False, nrows = 1000).dropna().reset_index(drop = True)    
+    train_dataset = pd.read_csv(r'C:\etc\code\Practice\NLP\Semantic Similarity\dataset\multinli.train.ko.tsv.txt', sep = '\t', error_bad_lines = False).dropna().reset_index(drop = True)    
     train_dataset.gold_label = train_dataset.gold_label.apply(lambda x: categorizer(x))
     y_train = to_categorical(train_dataset.gold_label, num_classes = 3)
     train_data = BertSemanticDataGenerator(

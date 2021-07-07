@@ -244,7 +244,7 @@ if __name__ == '__main__':
     # fine-tuning
     model.trainable = True
     model.compile(
-        optimizer = Adam(),
+        optimizer = Adam(1e-5),
         loss = 'categorical_crossentropy',
         metrics = ['accuracy']
         )

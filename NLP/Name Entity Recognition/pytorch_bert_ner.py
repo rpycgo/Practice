@@ -217,3 +217,177 @@ class NERDataModule(pl.LightningDataModule):
             batch_size = self.batch_size,
             shuffle = False
             )    
+
+class pytorch_crf_ner(pl.LightningModule):
+    
+    def __init__(self, train_samples = 1751, batch_size = 64 , epochs = 10):
+        super().__init__()
+    
+        self.train_samples = train_samples
+        self.batch_size = batch_size
+        self.gradient_accumulation_steps = 1
+        self.epochs = epochs
+        self.warm_up_proportion = 0.2
+        self.num_train_optimization_steps = int(self.train_samples / self.batch_size / self.gradient_accumulation_steps) * epochs
+        self.num_warmup_steps = int(float(self.num_train_optimization_steps) * self.warm_up_proportion)
+
+        config = BertConfig.from_pretrained('model', output_hidden_states = True)
+        config.num_labels = 263
+        self.bert_model = BertModel.from_pretrained('model', config = config)
+        
+        self.optimizer_grouped_parameters = self.get_optimizer_grouped_parameters()
+        
+        self.criterion = nn.CrossEntropyLoss()
+        
+        self.dropout = nn.Dropout(p = 0.5)
+        self.linear_layer = nn.Linear(in_features = 768, out_features = config.num_labels)
+        self.crf = CRF(num_tags = config.num_labels, batch_first = True)
+        
+        
+    def forward(self, input_ids, attention_mask, token_type_ids, tags = None):        
+        output = self.bert_model(
+            input_ids,
+            attention_mask = attention_mask,
+            token_type_ids = token_type_ids,
+            tags = tags
+            )
+         
+        return output.loss, output.logits
+    
+    
+    def get_optimizer_grouped_parameters(self):
+                
+        no_decay_layer_list = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        
+        optimizer_grouped_parameters = []
+
+        layers = list(self.bert_model.named_parameters())
+        
+        encoder_decay = {
+            'params': [param for name, param in layers if
+                       not any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
+            'weight_decay': 0.01
+            }
+    
+        encoder_nodecay = {
+            'params': [param for name, param in layers if
+                       any(no_decay_layer_name in name for no_decay_layer_name in no_decay_layer_list)],
+            'weight_decay': 0.0}
+        
+        optimizer_grouped_parameters.append(encoder_decay)
+        optimizer_grouped_parameters.append(encoder_nodecay)
+            
+        return optimizer_grouped_parameters
+    
+    
+    def training_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        token_type_ids = batch['token_type_ids']
+        tags = batch['label']
+        
+        outputs = self.bert_model(
+            input_ids = input_ids,
+            attention_mask = attention_mask,
+            token_type_ids = token_type_ids,
+            tags = tags
+            )
+                
+        dropout_layer = self.dropout(outputs.last_hidden_state)
+        linear_layer = self.linear_layer(dropout_layer)
+        
+        
+        sequence_of_tags = self.crf.decode(linear_layer)                
+        # total_num = len(tags)
+        # correct_num = sum([1 for i, j in list(zip(tags, sequence_of_tags[0])) if i == j])
+        # acc = correct_num / total_num
+        
+        # self.log('train_acc', acc, prog_bar = True, logger = True)
+
+        if tags is not None:
+            log_likelihood = self.crf(linear_layer, tags)
+            self.log('train_loss', log_likelihood, prog_bar = True, logger = True)            
+            return log_likelihood, sequence_of_tags
+        else:
+            return sequence_of_tags
+        
+    
+    
+    def validation_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        token_type_ids = batch['token_type_ids']
+        tags = batch['label']
+
+        
+        outputs = self.bert_model(
+            input_ids = input_ids,
+            attention_mask = attention_mask,
+            token_type_ids = token_type_ids
+            tags = tags
+            )
+                
+        dropout_layer = self.dropout(outputs.last_hidden_state)
+        linear_layer = self.linear_layer(dropout_layer)
+        
+        
+        sequence_of_tags = self.crf.decode(linear_layer)                
+        # total_num = len(tags)
+        # correct_num = sum([1 for i, j in list(zip(tags, sequence_of_tags[0])) if i == j])
+        # acc = correct_num / total_num
+        
+        # self.log('val_acc', acc, prog_bar = True, logger = True)
+
+        if tags is not None:
+            log_likelihood = self.crf(linear_layer, tags)
+            self.log('val_loss', log_likelihood, prog_bar = True, logger = True)            
+            return log_likelihood, sequence_of_tags
+        else:
+            return sequence_of_tags
+    
+    
+    def test_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        token_type_ids = batch['token_type_ids']        
+        tags = batch['label']
+
+        outputs = self.bert_model(
+            input_ids = input_ids,
+            attention_mask = attention_mask,
+            token_type_ids = token_type_ids
+            )
+                
+        dropout_layer = self.dropout(outputs.last_hidden_state)
+        linear_layer = self.linear_layer(dropout_layer)
+        
+        
+        sequence_of_tags = self.crf.decode(linear_layer)
+        # total_num = tags.size(0)
+        # correct_num = sum([1 for i, j in list(zip(tags[0], sequence_of_tags[0])) if i == j])
+        # acc = correct_num / total_num
+        
+        # self.log('test_acc', acc, prog_bar = True, logger = True)
+
+        if tags is not None:
+            log_likelihood = self.crf(linear_layer, tags)
+            self.log('test_loss', log_likelihood, prog_bar = True, logger = True)            
+            return log_likelihood, sequence_of_tags
+        else:
+            return sequence_of_tags
+    
+    
+    def configure_optimizers(self):
+        
+        optimizer = AdamW(
+            self.optimizer_grouped_parameters,            
+            correct_bias = False
+            )
+
+        scheduler = get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps = self.num_warmup_steps,
+            num_training_steps = self.num_train_optimization_steps
+            )
+        
+        return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]

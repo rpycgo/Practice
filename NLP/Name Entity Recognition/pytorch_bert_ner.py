@@ -95,3 +95,59 @@ def get_input_data(dataset):
         input_dataframe.reset_index(drop = True, inplace = True)
         
     return input_dataframe
+
+
+
+
+class NERDataset(Dataset):
+    
+    def __init__(
+            self,
+            data: pd.DataFrame,
+            tokenizer: BertTokenizer,
+            text_max_token_length: int = 128
+            ):
+                
+        self.tokenizer = tokenizer
+        self.data = data
+        self.text_max_token_length = text_max_token_length
+        
+    
+    def __len__(self):
+        return len(self.data)
+    
+    
+    def _get_bert_input_data(self, text):
+                
+        # truncation
+        if len(text) > (self.text_max_token_length - 2):
+            text = text[:(self.text_max_token_length - 2)]
+        text.insert(0, '[CLS]')
+        text += ['[SEP]']
+            
+        input_ids = self.tokenizer.convert_tokens_to_ids(text)
+        attention_mask = pad_sequences([[1] * len(input_ids)], maxlen = self.text_max_token_length, padding = 'post')
+        segment_ids = [[0] * self.text_max_token_length]
+        
+        input_ids = pad_sequences([input_ids], maxlen = self.text_max_token_length, padding = 'post', dtype = 'int32')
+        
+        return dict(
+            input_ids = torch.tensor(input_ids), 
+            attention_mask = torch.tensor(attention_mask),
+            segment_ids = torch.tensor(segment_ids)
+            )
+        
+    
+    
+    def __getitem__(self, index: int):
+        
+        data_row = self.data.iloc[index]
+    
+        encoded_text = self._get_bert_input_data(data_row['text'])
+        
+        return dict(
+            input_ids = encoded_text['input_ids'].flatten(),
+            attention_mask = encoded_text['attention_mask'].flatten(),
+            token_type_ids = encoded_text['segment_ids'].flatten(),
+            label = torch.tensor([data_row.tags]).flatten()
+            )

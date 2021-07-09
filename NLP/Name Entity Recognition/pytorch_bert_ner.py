@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jul  6 22:50:34 2021
+
+@author: MJH
+"""
 from tokenization import *
 
 import pandas as pd
@@ -98,7 +104,6 @@ def get_input_data(dataset):
 
 
 
-
 class NERDataset(Dataset):
     
     def __init__(
@@ -147,11 +152,12 @@ class NERDataset(Dataset):
         
         return dict(
             input_ids = encoded_text['input_ids'].flatten(),
-            attention_mask = encoded_text['attention_mask'].flatten(),
             token_type_ids = encoded_text['segment_ids'].flatten(),
-            label = torch.tensor([data_row.tags]).flatten()
+            attention_mask = encoded_text['attention_mask'].flatten(),
+            label = torch.tensor(data_row.tags)
             )
-            
+    
+    
     
 class NERDataModule(pl.LightningDataModule):
     
@@ -160,7 +166,7 @@ class NERDataModule(pl.LightningDataModule):
         train_df: pd.DataFrame,
         test_df: pd.DataFrame,
         tokenizer: BertTokenizer,
-        batch_size: int = 32,
+        batch_size: int = 64,
         text_max_token_length: int = 128,
     ):
         
@@ -217,10 +223,13 @@ class NERDataModule(pl.LightningDataModule):
             batch_size = self.batch_size,
             shuffle = False
             )    
+    
+    
+
 
 class pytorch_crf_ner(pl.LightningModule):
     
-    def __init__(self, train_samples = 1751, batch_size = 64 , epochs = 10):
+    def __init__(self, train_samples = 1751, batch_size = 64, epochs = 10):
         super().__init__()
     
         self.train_samples = train_samples
@@ -232,27 +241,23 @@ class pytorch_crf_ner(pl.LightningModule):
         self.num_warmup_steps = int(float(self.num_train_optimization_steps) * self.warm_up_proportion)
 
         config = BertConfig.from_pretrained('model', output_hidden_states = True)
-        config.num_labels = 263
+        config.num_labels = 267
         self.bert_model = BertModel.from_pretrained('model', config = config)
         
         self.optimizer_grouped_parameters = self.get_optimizer_grouped_parameters()
-        
-        self.criterion = nn.CrossEntropyLoss()
-        
         self.dropout = nn.Dropout(p = 0.5)
-        self.linear_layer = nn.Linear(in_features = 768, out_features = config.num_labels)
+        self.linear_layer = nn.Linear(in_features = config.hidden_size, out_features = config.num_labels)
         self.crf = CRF(num_tags = config.num_labels, batch_first = True)
         
         
-    def forward(self, input_ids, attention_mask, token_type_ids, tags = None):        
-        output = self.bert_model(
-            input_ids,
-            attention_mask = attention_mask,
+    def forward(self, input_ids, token_type_ids, attention_mask):
+        outputs = self.bert_model(
+            input_ids = input_ids,
             token_type_ids = token_type_ids,
-            tags = tags
+            attention_mask = attention_mask
             )
          
-        return output.loss, output.logits
+        return outputs
     
     
     def get_optimizer_grouped_parameters(self):
@@ -282,15 +287,15 @@ class pytorch_crf_ner(pl.LightningModule):
     
     def training_step(self, batch, batch_index):
         input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
         token_type_ids = batch['token_type_ids']
+        attention_mask = batch['attention_mask']
         tags = batch['label']
         
         outputs = self.bert_model(
             input_ids = input_ids,
-            attention_mask = attention_mask,
             token_type_ids = token_type_ids,
-            tags = tags
+            attention_mask = attention_mask,
+            # labels = tags
             )
                 
         dropout_layer = self.dropout(outputs.last_hidden_state)
@@ -305,7 +310,7 @@ class pytorch_crf_ner(pl.LightningModule):
         # self.log('train_acc', acc, prog_bar = True, logger = True)
 
         if tags is not None:
-            log_likelihood = self.crf(linear_layer, tags)
+            log_likelihood = self.crf(linear_layer, tags.long())
             self.log('train_loss', log_likelihood, prog_bar = True, logger = True)            
             return log_likelihood, sequence_of_tags
         else:
@@ -322,16 +327,17 @@ class pytorch_crf_ner(pl.LightningModule):
         
         outputs = self.bert_model(
             input_ids = input_ids,
+            token_type_ids = token_type_ids,
             attention_mask = attention_mask,
-            token_type_ids = token_type_ids
-            tags = tags
+            # labels = tags
             )
-                
+        
         dropout_layer = self.dropout(outputs.last_hidden_state)
         linear_layer = self.linear_layer(dropout_layer)
         
         
-        sequence_of_tags = self.crf.decode(linear_layer)                
+        sequence_of_tags = self.crf.decode(linear_layer)               
+
         # total_num = len(tags)
         # correct_num = sum([1 for i, j in list(zip(tags, sequence_of_tags[0])) if i == j])
         # acc = correct_num / total_num
@@ -339,7 +345,7 @@ class pytorch_crf_ner(pl.LightningModule):
         # self.log('val_acc', acc, prog_bar = True, logger = True)
 
         if tags is not None:
-            log_likelihood = self.crf(linear_layer, tags)
+            log_likelihood = self.crf(linear_layer, tags.long())
             self.log('val_loss', log_likelihood, prog_bar = True, logger = True)            
             return log_likelihood, sequence_of_tags
         else:
@@ -354,8 +360,9 @@ class pytorch_crf_ner(pl.LightningModule):
 
         outputs = self.bert_model(
             input_ids = input_ids,
-            attention_mask = attention_mask,
-            token_type_ids = token_type_ids
+            token_type_ids = token_type_ids,
+            attention_mask = attention_mask,            
+            # labels = tags
             )
                 
         dropout_layer = self.dropout(outputs.last_hidden_state)
@@ -370,7 +377,7 @@ class pytorch_crf_ner(pl.LightningModule):
         # self.log('test_acc', acc, prog_bar = True, logger = True)
 
         if tags is not None:
-            log_likelihood = self.crf(linear_layer, tags)
+            log_likelihood = self.crf(sequence_of_tags, tags.long())
             self.log('test_loss', log_likelihood, prog_bar = True, logger = True)            
             return log_likelihood, sequence_of_tags
         else:
@@ -391,3 +398,65 @@ class pytorch_crf_ner(pl.LightningModule):
             )
         
         return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
+    
+    
+    
+if __name__ == '__main__':
+
+    tokenizer = BertTokenizer('vocab.korean.rawtext.list')
+    
+    dataset = load_data('dataset')
+    input_dataframe = get_input_data(dataset)
+            
+    tags = set(list(itertools.chain(*input_dataframe.tags)))
+    tags.remove('O')
+    
+    tags_to_ids = {c: (i + 5) for i, c in enumerate(tags)}
+    tags_to_ids['O'] = 266
+    tags_to_ids['[PAD]'] = 0
+    tags_to_ids['[UNK]'] = 1
+    tags_to_ids['[CLS]'] = 2
+    tags_to_ids['[SEP]'] = 3
+    tags_to_ids['[MASK]'] = 4
+    ids_to_tags = {}
+    for key, value in tags_to_ids.items():
+        ids_to_tags[value] = key
+    
+    input_dataframe.tags = input_dataframe.tags.apply(lambda x: ['[CLS]'] + x + ['[SEP]'])
+    input_dataframe.tags = input_dataframe.tags.apply(lambda x: [tags_to_ids[i] for i in x])
+    input_dataframe.tags = input_dataframe.tags.apply(lambda x: pad_sequences([x], maxlen = 128, padding = 'post', value = 0)[0])
+
+    train, test = train_test_split(input_dataframe, test_size = 0.2)    
+
+
+    BATCH_SIZE = 64
+    EPOCHS = 10
+    
+    model = pytorch_crf_ner(train_samples = 1751, batch_size = BATCH_SIZE, epochs = EPOCHS)
+    data_module = NERDataModule(train, test, tokenizer, batch_size = BATCH_SIZE)
+    
+    checkpoint_callback = ModelCheckpoint(
+        dirpath = 'checkpoints',
+        filename = 'best-checkpoint',
+        save_top_k = 1,
+        verbose = True,
+        monitor = 'val_loss',
+        mode = 'min'        
+        )
+
+    logger = TensorBoardLogger('lightning_logs', name = 'finbert_sentiment')
+    
+    
+    trainer = pl.Trainer(
+        logger = logger,
+        checkpoint_callback = checkpoint_callback,
+        max_epochs = EPOCHS,
+        progress_bar_refresh_rate = 1
+        )
+    
+    trainer.fit(model, data_module)
+    
+    
+    
+    ner_model = pytorch_crf_ner.load_from_checkpoint(trainer.checkpoint_callback.best_model_path)
+    ner_model.freeze()

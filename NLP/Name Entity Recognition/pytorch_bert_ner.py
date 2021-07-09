@@ -7,6 +7,7 @@ Created on Tue Jul  6 22:50:34 2021
 from tokenization import *
 
 import pandas as pd
+import numpy as np
 import re
 import json
 import glob
@@ -19,7 +20,6 @@ from sklearn.model_selection import train_test_split
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torch.utils.data import Dataset, DataLoader
 from torchcrf import CRF
 from sklearn.model_selection import train_test_split
@@ -302,19 +302,22 @@ class pytorch_crf_ner(pl.LightningModule):
         linear_layer = self.linear_layer(dropout_layer)
         
         
-        sequence_of_tags = self.crf.decode(linear_layer)                
-        # total_num = len(tags)
-        # correct_num = sum([1 for i, j in list(zip(tags, sequence_of_tags[0])) if i == j])
-        # acc = correct_num / total_num
+        sequence_of_tags = self.crf.decode(linear_layer)
+        sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool()]
+        real = tags[attention_mask.bool()]
+        correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
+        total_num = attention_mask.bool().sum()        
+        acc = correct_num / total_num
         
-        # self.log('train_acc', acc, prog_bar = True, logger = True)
+        self.log('train_acc', acc, prog_bar = True, logger = True)
 
         if tags is not None:
             log_likelihood = self.crf(linear_layer, tags.long())
-            self.log('train_loss', log_likelihood, prog_bar = True, logger = True)            
-            return log_likelihood, sequence_of_tags
+            self.log('train_loss', log_likelihood, prog_bar = True, logger = True)
         else:
-            return sequence_of_tags
+            pass
+        
+        return log_likelihood
         
     
     
@@ -335,21 +338,23 @@ class pytorch_crf_ner(pl.LightningModule):
         dropout_layer = self.dropout(outputs.last_hidden_state)
         linear_layer = self.linear_layer(dropout_layer)
         
+        sequence_of_tags = self.crf.decode(linear_layer)
+        sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool()]
+        real = tags[attention_mask.bool()]
+        correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
+        total_num = attention_mask.bool().sum()        
+        acc = correct_num / total_num
         
-        sequence_of_tags = self.crf.decode(linear_layer)               
-
-        # total_num = len(tags)
-        # correct_num = sum([1 for i, j in list(zip(tags, sequence_of_tags[0])) if i == j])
-        # acc = correct_num / total_num
-        
-        # self.log('val_acc', acc, prog_bar = True, logger = True)
+        self.log('val_acc', acc, prog_bar = True, logger = True)
 
         if tags is not None:
             log_likelihood = self.crf(linear_layer, tags.long())
-            self.log('val_loss', log_likelihood, prog_bar = True, logger = True)            
-            return log_likelihood, sequence_of_tags
+            self.log('train_loss', log_likelihood, prog_bar = True, logger = True)
         else:
-            return sequence_of_tags
+            pass
+        
+        return log_likelihood
+        
     
     
     def test_step(self, batch, batch_index):

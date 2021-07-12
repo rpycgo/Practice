@@ -256,8 +256,14 @@ class pytorch_crf_ner(pl.LightningModule):
             token_type_ids = token_type_ids,
             attention_mask = attention_mask
             )
+        
+        dropout_layer = self.dropout(outputs.last_hidden_state)
+        linear_layer = self.linear_layer(dropout_layer)
+        
+        sequence_of_tags = self.crf.decode(linear_layer)
+        sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool()]
          
-        return outputs
+        return linear_layer, sequence_of_tags
     
     
     def get_optimizer_grouped_parameters(self):
@@ -291,19 +297,13 @@ class pytorch_crf_ner(pl.LightningModule):
         attention_mask = batch['attention_mask']
         tags = batch['label']
         
-        outputs = self.bert_model(
+        linear_layer, sequence_of_tags = self(
             input_ids = input_ids,
             token_type_ids = token_type_ids,
             attention_mask = attention_mask,
             # labels = tags
             )
-                
-        dropout_layer = self.dropout(outputs.last_hidden_state)
-        linear_layer = self.linear_layer(dropout_layer)
-        
-        
-        sequence_of_tags = self.crf.decode(linear_layer)
-        sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool()]
+     
         real = tags[attention_mask.bool()]
         correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
         total_num = attention_mask.bool().sum()        
@@ -328,18 +328,13 @@ class pytorch_crf_ner(pl.LightningModule):
         tags = batch['label']
 
         
-        outputs = self.bert_model(
+        linear_layer, sequence_of_tags = self(
             input_ids = input_ids,
             token_type_ids = token_type_ids,
             attention_mask = attention_mask,
             # labels = tags
             )
-        
-        dropout_layer = self.dropout(outputs.last_hidden_state)
-        linear_layer = self.linear_layer(dropout_layer)
-        
-        sequence_of_tags = self.crf.decode(linear_layer)
-        sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool()]
+   
         real = tags[attention_mask.bool()]
         correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
         total_num = attention_mask.bool().sum()        
@@ -363,23 +358,13 @@ class pytorch_crf_ner(pl.LightningModule):
         token_type_ids = batch['token_type_ids']        
         tags = batch['label']
 
-        outputs = self.bert_model(
+        linear_layer, sequence_of_tags = self(
             input_ids = input_ids,
             token_type_ids = token_type_ids,
             attention_mask = attention_mask,            
             # labels = tags
             )
                 
-        dropout_layer = self.dropout(outputs.last_hidden_state)
-        linear_layer = self.linear_layer(dropout_layer)
-        
-        
-        sequence_of_tags = self.crf.decode(linear_layer)
-        # total_num = tags.size(0)
-        # correct_num = sum([1 for i, j in list(zip(tags[0], sequence_of_tags[0])) if i == j])
-        # acc = correct_num / total_num
-        
-        # self.log('test_acc', acc, prog_bar = True, logger = True)
 
         if tags is not None:
             log_likelihood = self.crf(sequence_of_tags, tags.long())

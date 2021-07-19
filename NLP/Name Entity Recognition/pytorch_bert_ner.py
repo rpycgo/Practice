@@ -229,7 +229,7 @@ class NERDataModule(pl.LightningDataModule):
 
 class pytorch_crf_ner(pl.LightningModule):
     
-    def __init__(self, train_samples = 1751, batch_size = 64, epochs = 10):
+    def __init__(self, train_samples = 1751, batch_size = 128, epochs = 10):
         super().__init__()
     
         self.train_samples = train_samples
@@ -242,30 +242,137 @@ class pytorch_crf_ner(pl.LightningModule):
 
         config = BertConfig.from_pretrained('model', output_hidden_states = True)
         config.num_labels = 267
-        self.bert_model = BertModel.from_pretrained('model', config = config)
+        self.bert_model = BertForTokenClassification.from_pretrained('model', config = config)
         
         self.optimizer_grouped_parameters = self.get_optimizer_grouped_parameters()
         self.dropout = nn.Dropout(p = 0.5)
         self.linear_layer = nn.Linear(in_features = config.hidden_size, out_features = config.num_labels)
         self.crf = CRF(num_tags = config.num_labels, batch_first = True)
         
+#         self.f1 = F1(num_classes = config.num_labels)
         
-    def forward(self, input_ids, token_type_ids, attention_mask):
+        
+    def forward(self, input_ids, token_type_ids, attention_mask, labels = None):
         outputs = self.bert_model(
             input_ids = input_ids,
             token_type_ids = token_type_ids,
-            attention_mask = attention_mask
+            attention_mask = attention_mask,
+            labels = None
+            )
+                                
+        dropout_layer = self.dropout(outputs.hidden_states[-1])
+        linear_layer = self.linear_layer(dropout_layer)
+                
+        if labels is not None:
+            log_likelihood = self.crf(linear_layer, labels, mask = attention_mask.bool())
+            sequence_of_tags = torch.tensor(self.crf.decode(linear_layer, mask = attention_mask.bool())).cuda()
+            
+            return log_likelihood, sequence_of_tags
+        
+        else:
+            sequence_of_tags = torch.tensor(self.crf.decode(linear_layer, mask = attention_mask.bool())).cuda()
+            
+            return sequence_of_tags
+
+         
+    def training_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        token_type_ids = batch['token_type_ids']
+        attention_mask = batch['attention_mask']
+        tags = batch['label'].long()
+                
+        log_likelihood, sequence_of_tags = self(
+            input_ids = input_ids,
+            token_type_ids = token_type_ids,
+            attention_mask = attention_mask,
+            labels = tags
             )
         
-        dropout_layer = self.dropout(outputs.last_hidden_state)
-        linear_layer = self.linear_layer(dropout_layer)
+        real = tags[attention_mask.bool()]
+        correct_num = torch.sum(sum(real == sequence_of_tags[attention_mask.bool()]))
+        total_num = attention_mask.bool().sum()        
+        acc = correct_num / total_num
+        f1score = f1_score(real.cpu(), sequence_of_tags[attention_mask.bool()].cpu(), average = 'micro')
+#         f1score = self.f1(torch.tensor(sequence_of_tags, device = 'cuda:0'), real)
         
-        sequence_of_tags = self.crf.decode(linear_layer)
-        sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool()]
+        self.log('train_f1', f1score, prog_bar = True, logger = True)            
+        self.log('train_loss', -log_likelihood, prog_bar = True, logger = True)
+
+        return -log_likelihood
+        
+    
+    
+    def validation_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        token_type_ids = batch['token_type_ids']
+        tags = batch['label'].long()
+
+        
+        log_likelihood, sequence_of_tags = self(
+            input_ids = input_ids,
+            token_type_ids = token_type_ids,
+            attention_mask = attention_mask,
+            labels = tags
+            )
+                
+#         dropout_layer = self.dropout(outputs.last_hidden_state)
+#         linear_layer = self.linear_layer(dropout_layer)
+        #sequence_of_tags[attention_mask.bool()]
+        
+#         sequence_of_tags = self.crf.decode(linear_layer)
+#         sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool().cpu()]
+        real = tags[attention_mask.bool()]
+        correct_num = torch.sum(sum(real == sequence_of_tags[attention_mask.bool()]))
+        total_num = attention_mask.bool().sum()        
+        acc = correct_num / total_num
+        f1score = f1_score(real.cpu(), sequence_of_tags[attention_mask.bool()].cpu(), average = 'micro')
+#         f1score = self.f1(torch.tensor(sequence_of_tags, device = 'cuda:0'), real)
          
-        return linear_layer, sequence_of_tags
+        self.log('val_f1', f1score, prog_bar = True, logger = True)
+        self.log('val_loss', -log_likelihood, prog_bar = True, logger = True)        
+        
+        return -log_likelihood
+        
     
     
+    def test_step(self, batch, batch_index):
+        input_ids = batch['input_ids']
+        attention_mask = batch['attention_mask']
+        token_type_ids = batch['token_type_ids']
+        tags = batch['label']
+
+        linear_layer, sequence_of_tags = self.bert_model(
+            input_ids = input_ids,
+            token_type_ids = token_type_ids,
+            attention_mask = attention_mask,
+            # labels = tags
+            )
+                
+#         dropout_layer = self.dropout(outputs.last_hidden_state)
+#         linear_layer = self.linear_layer(dropout_layer)
+        
+        
+#         sequence_of_tags = self.crf.decode(linear_layer)
+#         sequence_of_tags = np.asarray(sequence_of_tags)[attention_mask.bool().cpu()]
+        real = tags[attention_mask.bool().cpu()]
+        correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
+        real = tags[attention_mask.bool()]
+        correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
+        total_num = attention_mask.bool().sum()        
+        acc = correct_num / total_num
+        
+        self.log('val_acc', acc, prog_bar = True, logger = True)
+
+        if tags is not None:
+            log_likelihood = self.crf(linear_layer, tags.long())
+            self.log('val_loss', -log_likelihood, prog_bar = True, logger = True)
+        else:
+            pass
+        
+        return -log_likelihood
+    
+            
     def get_optimizer_grouped_parameters(self):
                 
         no_decay_layer_list = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -291,88 +398,6 @@ class pytorch_crf_ner(pl.LightningModule):
         return optimizer_grouped_parameters
     
     
-    def training_step(self, batch, batch_index):
-        input_ids = batch['input_ids']
-        token_type_ids = batch['token_type_ids']
-        attention_mask = batch['attention_mask']
-        tags = batch['label']
-        
-        linear_layer, sequence_of_tags = self(
-            input_ids = input_ids,
-            token_type_ids = token_type_ids,
-            attention_mask = attention_mask,
-            # labels = tags
-            )
-     
-        real = tags[attention_mask.bool()]
-        correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
-        total_num = attention_mask.bool().sum()        
-        acc = correct_num / total_num
-        
-        self.log('train_acc', acc, prog_bar = True, logger = True)
-
-        if tags is not None:
-            log_likelihood = self.crf(linear_layer, tags.long())
-            self.log('train_loss', log_likelihood, prog_bar = True, logger = True)
-        else:
-            pass
-        
-        return log_likelihood
-        
-    
-    
-    def validation_step(self, batch, batch_index):
-        input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
-        token_type_ids = batch['token_type_ids']
-        tags = batch['label']
-
-        
-        linear_layer, sequence_of_tags = self(
-            input_ids = input_ids,
-            token_type_ids = token_type_ids,
-            attention_mask = attention_mask,
-            # labels = tags
-            )
-   
-        real = tags[attention_mask.bool()]
-        correct_num = sum([1 for i, j in list(zip(real, sequence_of_tags)) if i == j])
-        total_num = attention_mask.bool().sum()        
-        acc = correct_num / total_num
-        
-        self.log('val_acc', acc, prog_bar = True, logger = True)
-
-        if tags is not None:
-            log_likelihood = self.crf(linear_layer, tags.long())
-            self.log('train_loss', log_likelihood, prog_bar = True, logger = True)
-        else:
-            pass
-        
-        return log_likelihood
-        
-    
-    
-    def test_step(self, batch, batch_index):
-        input_ids = batch['input_ids']
-        attention_mask = batch['attention_mask']
-        token_type_ids = batch['token_type_ids']        
-        tags = batch['label']
-
-        linear_layer, sequence_of_tags = self(
-            input_ids = input_ids,
-            token_type_ids = token_type_ids,
-            attention_mask = attention_mask,            
-            # labels = tags
-            )
-                
-
-        if tags is not None:
-            log_likelihood = self.crf(sequence_of_tags, tags.long())
-            self.log('test_loss', log_likelihood, prog_bar = True, logger = True)            
-            return log_likelihood, sequence_of_tags
-        else:
-            return sequence_of_tags
-    
     
     def configure_optimizers(self):
         
@@ -388,6 +413,8 @@ class pytorch_crf_ner(pl.LightningModule):
             )
         
         return [optimizer], [{'scheduler': scheduler, 'interval': 'step'}]
+    
+    
     
     
     

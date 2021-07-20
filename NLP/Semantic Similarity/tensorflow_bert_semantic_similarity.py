@@ -15,7 +15,8 @@ import tensorflow as tf
 
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Bidirectional, LSTM, GlobalAveragePooling1D, GlobalMaxPooling1D, concatenate, Dropout, Dense
-from tensorflow.keras.utils import Sequence, to_categorical, EarlyStopping
+from tensorflow.keras.utils import Sequence, to_categorical
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.optimizers import Adam
 from transformers import BertTokenizer
@@ -76,7 +77,7 @@ def build_model(max_length):
         # Freeze the BERT model to reuse the pretrained features without modifying them.
         bert_model.trainable = False
     
-        outputs = bert_model(input_ids = input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids)
+        outputs = bert_model(input_ids = input_ids, token_type_ids = token_type_ids, attention_mask = attention_mask)
         sequence_output, _ = outputs.last_hidden_state, outputs.pooler_output
         # Add trainable layers on top of frozen layers to adapt the pretrained features on the new data.
         bi_lstm = Bidirectional(

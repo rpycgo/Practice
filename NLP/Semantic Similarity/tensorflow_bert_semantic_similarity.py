@@ -19,10 +19,9 @@ from tensorflow.keras.utils import Sequence, to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.optimizers import Adam
-from transformers import BertTokenizer
 from transformers import BertConfig, TFBertModel
 
-
+labels = ["contradiction", "neutral", "entailment"]
 
 def categorizer(label):
     
@@ -47,7 +46,7 @@ def get_similarity(sentence1, sentence2):
 
     proba = model.predict(test_data)[0]
     idx = np.argmax(proba)
-    proba = f"{proba[idx]: .2f}%"
+    proba = f"{float(proba[idx]) * 100: .2f}%"
     pred = labels[idx]
     
     return pred, proba
@@ -260,4 +259,3 @@ if __name__ == '__main__':
         workers = -1,
         callbacks = [early_stopping]     
         )
-    

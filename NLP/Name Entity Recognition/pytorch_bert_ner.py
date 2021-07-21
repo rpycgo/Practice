@@ -14,7 +14,6 @@ import glob
 import itertools
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import pytorch_lightning as pl
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -23,12 +22,30 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import Dataset, DataLoader
 from torchcrf import CRF
 from sklearn.model_selection import train_test_split
-from transformers import BertConfig, BertModel
+from transformers import BertConfig, BertForTokenClassification
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
+from tqdm import tqdm
 
 
 
 def load_data(file_path, sep = '\t'):
+    '''    
+
+    Parameters
+    ----------
+    file_path : str
+        dataset directory
+    sep : TYPE, optional
+        DESCRIPTION. The default is '\t'.
+
+    Returns
+    -------
+    dictionary : TYPE
+        DESCRIPTION.
+
+    this load function is for etri dataset
+
+    '''
     
     file_lists = glob.glob('/'.join([file_path, '*.json']))
     
@@ -53,11 +70,57 @@ def load_data(file_path, sep = '\t'):
     return dictionary
 
 
+
+def load_data(file_path, sep = '\t'):
+    '''    
+
+    Parameters
+    ----------
+    file_path : str
+        dataset directory
+    sep : TYPE, optional
+        DESCRIPTION. The default is '\t'.
+
+    Returns
+    -------
+    dictionary : TYPE
+        DESCRIPTION.
+
+    this load function is for korean corpus dataset
+
+    '''
+    
+    file_lists = glob.glob('/'.join([file_path, '*.json']))
+    
+    dictionary = []
+    
+    for file in tqdm(file_lists):
+        with open(file, 'r', encoding = 'utf-8') as f:
+            json_file = json.loads(f.read()).get('document')
+            
+            for _json in json_file:
+                _json = list(filter(lambda x: x['ne'] != [], _json.get('sentence')))
+                for datum in _json:
+                    ne_dictionary = dict()
+                    sentence = datum.get('form')
+                    dic = ((doc.get('form'), doc.get('label')) for doc in datum.get('ne'))
+                    
+                    for word, tag in dic:
+                        ne_dictionary[word] = tag
+                    
+                    temp = {'sentence': sentence, 'ne': ne_dictionary}
+                    
+                    dictionary.append(temp)
+                    
+    return dictionary
+
+
+
 def get_input_data(dataset):
     
     input_dataframe = pd.DataFrame(columns = ['text', 'tags'])
     
-    for data in dataset:
+    for data in tqdm(dataset):
         sentence = data['sentence']
         sentence = sentence.replace('\xad', '­＿')
         name_entity = data['ne']
@@ -71,7 +134,8 @@ def get_input_data(dataset):
         character_dataframe = pd.DataFrame([j for i in sentence for j in i], columns = ['text'])
         
         for key in name_entity.keys():
-            for find in re.finditer(key, ''.join(sentence)):
+            no_space_key = key.replace(' ', '')
+            for find in re.finditer(no_space_key, ''.join(sentence)):                
                 index = find.span()
                 if ( index[1] - index[0] ) == 1:
                     character_dataframe.loc[index[0], 'tag'] = 'B-' + name_entity[key]
@@ -110,7 +174,7 @@ class NERDataset(Dataset):
             self,
             data: pd.DataFrame,
             tokenizer: BertTokenizer,
-            text_max_token_length: int = 128
+            text_max_token_length: int = 256
             ):
                 
         self.tokenizer = tokenizer
@@ -125,12 +189,11 @@ class NERDataset(Dataset):
     def _get_bert_input_data(self, text):
                 
         # truncation
-        if len(text) > (self.text_max_token_length - 2):
-            text = text[:(self.text_max_token_length - 2)]
-        text.insert(0, '[CLS]')
-        text += ['[SEP]']
-            
         input_ids = self.tokenizer.convert_tokens_to_ids(text)
+        if len(input_ids) > (self.text_max_token_length - 2):
+            text = text[:(self.text_max_token_length - 2)]
+        text = list(itertools.chain(*[[2], text, [3]]))
+                    
         attention_mask = pad_sequences([[1] * len(input_ids)], maxlen = self.text_max_token_length, padding = 'post')
         segment_ids = [[0] * self.text_max_token_length]
         
@@ -151,9 +214,9 @@ class NERDataset(Dataset):
         encoded_text = self._get_bert_input_data(data_row['text'])
         
         return dict(
-            input_ids = encoded_text['input_ids'].flatten(),
-            token_type_ids = encoded_text['segment_ids'].flatten(),
-            attention_mask = encoded_text['attention_mask'].flatten(),
+            input_ids = encoded_text['input_ids'].flatten().long(),
+            token_type_ids = encoded_text['segment_ids'].flatten().long(),
+            attention_mask = encoded_text['attention_mask'].flatten().long(),
             label = torch.tensor(data_row.tags)
             )
     
@@ -167,7 +230,7 @@ class NERDataModule(pl.LightningDataModule):
         test_df: pd.DataFrame,
         tokenizer: BertTokenizer,
         batch_size: int = 64,
-        text_max_token_length: int = 128,
+        text_max_token_length: int = 256,
     ):
         
         super().__init__()
@@ -441,7 +504,7 @@ if __name__ == '__main__':
     
     input_dataframe.tags = input_dataframe.tags.apply(lambda x: ['[CLS]'] + x + ['[SEP]'])
     input_dataframe.tags = input_dataframe.tags.apply(lambda x: [tags_to_ids[i] for i in x])
-    input_dataframe.tags = input_dataframe.tags.apply(lambda x: pad_sequences([x], maxlen = 128, padding = 'post', value = 0)[0])
+    input_dataframe.tags = input_dataframe.tags.apply(lambda x: pad_sequences([x], maxlen = 256, padding = 'post', value = 0)[0])
 
     train, test = train_test_split(input_dataframe, test_size = 0.2)    
 
@@ -461,7 +524,7 @@ if __name__ == '__main__':
         mode = 'min'        
         )
 
-    logger = TensorBoardLogger('lightning_logs', name = 'finbert_sentiment')
+    logger = TensorBoardLogger('lightning_logs', name = 'name_entity_recognition')
     
     
     trainer = pl.Trainer(

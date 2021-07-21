@@ -86,11 +86,11 @@ def load_data(file_path, sep = '\t'):
     dictionary : TYPE
         DESCRIPTION.
 
-    this load function is for korean corpus dataset
+    this load function is for corpus korean dataset
 
     '''
     
-    file_lists = glob.glob('/'.join([file_path, '*.json']))
+    file_lists = glob.glob('/'.join([file_path, '*.JSON']))
     
     dictionary = []
     

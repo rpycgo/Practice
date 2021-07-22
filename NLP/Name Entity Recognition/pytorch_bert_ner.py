@@ -191,8 +191,8 @@ class NERDataset(Dataset):
         # truncation
         input_ids = self.tokenizer.convert_tokens_to_ids(text)
         if len(input_ids) > (self.text_max_token_length - 2):
-            text = text[:(self.text_max_token_length - 2)]
-        text = list(itertools.chain(*[[2], text, [3]]))
+            input_ids = input_ids[:(self.text_max_token_length - 2)]
+        input_ids = list(itertools.chain(*[[2], input_ids, [3]]))
                     
         attention_mask = pad_sequences([[1] * len(input_ids)], maxlen = self.text_max_token_length, padding = 'post')
         segment_ids = [[0] * self.text_max_token_length]

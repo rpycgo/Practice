@@ -1,7 +1,9 @@
 from layers.multi_head_attention import MultiHeadAttention
 
-import os
 import numpy as np
+import json
+import os
+import itertools
 import matplotlib.pyplot as plt
 
 from pathlib import Path
@@ -10,21 +12,23 @@ from collections import Counter
 import tensorflow.keras.backend as K
 import tensorflow as tf
 from tensorflow.keras import layers, Input
-from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
     Dense, 
-    Flatten, 
+    # Flatten, 
     Conv2D, 
     MaxPool2D, 
     Reshape, 
     BatchNormalization, 
-    Lambda, 
-    Bidirectional, 
-    LSTM,
-    Concatenate,
+    # Lambda, 
+    # Bidirectional, 
+    # LSTM,
+    # Concatenate,
     Dropout,
     LayerNormalization
     )
+from tensorflow.keras.layers.experimental.preprocessing import StringLookup
+from tqdm import tqdm
 
 
 
@@ -75,8 +79,7 @@ class CRNNOCR:
     def build_model(self):
 
         inputs = Input(shape = (self.image_height, self.image_width, 1), name = 'input_layer')
-        labels = Input(shape = (None, ), name = 'label_input', dtype = 'float32')
-        #padding_mask = Input(shape=(1, 1, None), name = 'padding_mask')
+        labels = Input(shape = (None, ), name = 'label_input', dtype = 'float32')        
         
         convolution_layer_1 = Conv2D(
             filters = 64,
@@ -178,9 +181,7 @@ class CRNNOCR:
             padding = 'valid',
             name = 'convolution_layer_6_1'
             )(pooling_layer_4)
-          
-        
-        
+                  
         reshape_layer = Reshape((-1, 512), name = 'reshape_layer')(convolution_layer_6)
         
                   
@@ -205,9 +206,10 @@ class CRNNOCR:
         #     )(bidirectional_lstm_layer_1)
         
         multi_head_attention_layer = MultiHeadAttention(d_model = 512, num_heads = 8, name = 'multi_head_attention_layer')(
-            {'query': reshape_layer,
-              'key': reshape_layer,
-              'value': reshape_layer
+            {
+                'query': reshape_layer,
+                'key': reshape_layer,
+                'value': reshape_layer
               }
             )
         
@@ -219,9 +221,9 @@ class CRNNOCR:
         ffnn_2 = Dense(units = 512, activation = 'relu', name = 'ffnn_layer_2')(ffnn_1)
         
         dropout_layer_2 = Dropout(rate = 0.5, name = 'dropout_layer_2')(ffnn_2)
-        residual_layer_2 = LayerNormalization(epsilon = 1e-6, name = 'layer_normalization_layer_2')(residual_layer_1 + ffnn_2)
+        residual_layer_2 = LayerNormalization(epsilon = 1e-6, name = 'layer_normalization_layer_2')(residual_layer_1 + dropout_layer_2)
  
-        outputs = Dense(units = self.max_char_len + 1, activation = 'softmax', name = 'classification_layer')(reshape_layer_2)        
+        outputs = Dense(units = self.max_char_len + 1, activation = 'softmax', name = 'classification_layer')(residual_layer_2)        
         ctc_loss = CTCLayer(name = 'ctc_loss')(labels, outputs)
         
         model = Model(inputs = [inputs, labels], outputs = ctc_loss)
@@ -291,31 +293,70 @@ if __name__ == '__main__':
     ######### data #########s
     #!curl -L0 https://github.com/AakashKumarNain/CaptchaCracker/raw/master/captcha_images_v2.zip
     #!unzip -qq captcha_images_v2.zip
+    
+    #data_dir = Path('./captcha_images_v2/')
+    
+    ### korean ###
+    korean_data_dir = Path('C:/etc/code/Practice1/Computer Vision/data/word')
+    korean_images = sorted(list(map(str, list(korean_data_dir.glob('*.png')))))
+    
+    with open('C:/etc/code/Practice1/Computer Vision/data/printed_data_info (1).json', 'r', encoding = 'utf-8') as f:
+        korean_data_info = json.loads(f.read())
+    
+    korean_word_image_data_info = list(filter(lambda x: x['file_name'][:2] == '02', korean_data_info['images']))
+    korean_max_width = max(list(map(lambda x: x['width'], korean_word_image_data_info)))
+    korean_max_height = max(list(map(lambda x: x['height'], korean_word_image_data_info)))
         
-    data_dir = Path('./captcha_images_v2/')
-    images = sorted(list(map(str, list(data_dir.glob('*.png')))))
-    labels = [img.split(os.path.sep)[-1].split(".png")[0] for img in images]
-    characters = set(char for label in labels for char in label)
+    korean_annotations = list(filter(lambda x: x['image_id'][:3] in ['022', '023', '024'], korean_data_info['annotations']))
     
-    print('Number of images found: ', len(images))
-    print('Number of labels found: ', len(labels))
-    print('Number of unique characters: ', len(characters))
-    print('Characters present: ', characters)
+    korean_labels = [img['text'] for img in tqdm(korean_annotations)]
+    korean_characters = set(char for label in korean_labels for char in label)
     
-    downsample_factor = 4
-    max_length = max([len(label) for label in labels])
-    BATCH_SIZE = 8
+    print('Number of images found: ', len(korean_word_image_data_info))
+    print('Number of labels found: ', len(korean_labels))
+    print('Number of unique characters: ', len(korean_characters))
     
-    IMAGE_HEIGHT = 200
-    IMAGE_WIDTH = 50
+    
+    ### english ###
+    english_data_base_dir = Path('C:/etc/code/Practice1/Computer Vision/data/word_eng')
+    with open(os.path.join(english_data_base_dir, 'imlist.txt'), 'r') as f:
+        english_images = f.read().split('\n')
+    english_images = list(map(lambda x: os.path.join(english_data_base_dir, x[2:]), english_images))
+    
+    english_labels = [img.split(os.path.sep)[-1].split('.jpg')[0].split('/')[-1].split('_')[1] for img in tqdm(english_images)]
+    english_characters = set(char for label in tqdm(english_labels) for char in label)
+        
+    print('Number of images found: ', len(english_images))
+    print('Number of labels found: ', len(english_labels))
+    print('Number of unique characters: ', len(english_characters))
+
+    
+    
+    ### append ###
+    labels = [korean_labels, english_labels]
+    labels = list(itertools.chain(*labels))
+    
+    characters = [korean_characters, english_characters]
+    characters = list(itertools.chain(*characters))
+    
+    images = [korean_images, english_images]
+    images = list(itertools.chain(*images))
+    
+        
+    max_length = max([len(label) for label in tqdm(labels)])    
+    downsample_factor = 4 
+    BATCH_SIZE = 8    
+    IMAGE_HEIGHT = korean_max_height
+    IMAGE_WIDTH = korean_max_width
+
     
     # preprocessing
-    char_to_num = layers.experimental.preprocessing.StringLookup(
+    char_to_num = StringLookup(
         vocabulary = list(characters), num_oov_indices = 0, mask_token = None
     )
     
-    num_to_char = layers.experimental.preprocessing.StringLookup(
-        vocabulary=char_to_num.get_vocabulary(), mask_token = None, invert = True
+    num_to_char = StringLookup(
+        vocabulary = char_to_num.get_vocabulary(), mask_token = None, invert = True
     )
     
     
@@ -323,24 +364,23 @@ if __name__ == '__main__':
     # split data
     x_train, x_valid, y_train, y_valid = split_data(np.array(images), np.array(labels))
     
-    
     # tensorflow dataset
     train_dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
     train_dataset = (
         train_dataset.map(
-            encode_single_sample, num_parallel_calls=tf.data.experimental.AUTOTUNE
+            encode_single_sample, num_parallel_calls = tf.data.experimental.AUTOTUNE
         )
         .batch(BATCH_SIZE)
-        .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+        .prefetch(buffer_size = tf.data.experimental.AUTOTUNE)
     )
     
     validation_dataset = tf.data.Dataset.from_tensor_slices((x_valid, y_valid))
     validation_dataset = (
         validation_dataset.map(
-            encode_single_sample, num_parallel_calls=tf.data.experimental.AUTOTUNE
+            encode_single_sample, num_parallel_calls = tf.data.experimental.AUTOTUNE
         )
         .batch(BATCH_SIZE)
-        .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+        .prefetch(buffer_size = tf.data.experimental.AUTOTUNE)
     )
     
     
@@ -359,7 +399,7 @@ if __name__ == '__main__':
     
     
     
-    model = CRNNOCR(19, IMAGE_HEIGHT, IMAGE_WIDTH).build_model()
+    model = CRNNOCR(len(characters), IMAGE_HEIGHT, IMAGE_WIDTH).build_model()
     model.summary()
     EPOCHS = 100
     EARLY_STOPPING_PATIENCE = 10

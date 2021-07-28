@@ -307,7 +307,12 @@ if __name__ == '__main__':
     korean_max_width = max(list(map(lambda x: x['width'], korean_word_image_data_info)))
     korean_max_height = max(list(map(lambda x: x['height'], korean_word_image_data_info)))
         
-    korean_annotations = list(filter(lambda x: x['image_id'][:3] in ['022', '023', '024'], korean_data_info['annotations']))
+    korean_annotations = list(filter(lambda x: x['image_id'][:3] in ['022', '023', '024'], korean_data_info['annotations']))    
+    existing_img_id_list = list(map(lambda x: x.split('\\')[-1].split('.')[0], korean_images))
+    
+    korean_annotations = list(filter(lambda x: x['image_id'] in existing_img_id_list, tqdm(korean_annotations)))    
+    korean_word_image_data_info = list(filter(lambda x: x['id'] in existing_img_id_list, tqdm(korean_word_image_data_info)))
+    
     
     korean_labels = [img['text'] for img in tqdm(korean_annotations)]
     korean_characters = set(char for label in korean_labels for char in label)

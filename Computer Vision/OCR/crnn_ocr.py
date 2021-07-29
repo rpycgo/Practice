@@ -248,9 +248,6 @@ def split_data(images, labels, train_size = 0.9, shuffle = True):
     return x_train, x_valid, y_train, y_valid
     
     
-    # Splitting data into training and validation sets
-    x_train, x_valid, y_train, y_valid = split_data(np.array(images), np.array(labels))
-    
 
 def encode_single_sample(img_path, label):
     # 1. Read image
@@ -312,8 +309,7 @@ if __name__ == '__main__':
     
     korean_annotations = list(filter(lambda x: x['image_id'] in existing_img_id_list, tqdm(korean_annotations)))    
     korean_word_image_data_info = list(filter(lambda x: x['id'] in existing_img_id_list, tqdm(korean_word_image_data_info)))
-    
-    
+        
     korean_labels = [img['text'] for img in tqdm(korean_annotations)]
     korean_characters = set(char for label in korean_labels for char in label)
     
@@ -341,14 +337,19 @@ if __name__ == '__main__':
     labels = [korean_labels, english_labels]
     labels = list(itertools.chain(*labels))
     
+    max_length = max([len(label) for label in labels])
+    # padding
+    labels = list(map(lambda x: ''.join([x, ' ' * (max_length - len(x))]), labels))
+    
     characters = [korean_characters, english_characters]
     characters = list(itertools.chain(*characters))
+    characters.append(' ')
     
     images = [korean_images, english_images]
     images = list(itertools.chain(*images))
     
         
-    max_length = max([len(label) for label in tqdm(labels)])    
+    
     downsample_factor = 4 
     BATCH_SIZE = 8    
     IMAGE_HEIGHT = korean_max_height
@@ -364,9 +365,9 @@ if __name__ == '__main__':
         vocabulary = char_to_num.get_vocabulary(), mask_token = None, invert = True
     )
     
-    
-    
-    # split data
+        
+
+    # Splitting data into training and validation sets
     x_train, x_valid, y_train, y_valid = split_data(np.array(images), np.array(labels))
     
     # tensorflow dataset

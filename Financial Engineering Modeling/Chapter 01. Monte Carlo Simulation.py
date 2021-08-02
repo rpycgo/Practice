@@ -157,4 +157,19 @@ def get_cholesky_decomposition(array):
                     cholesky_matrix[i, j] = ( array[i, j] - s ) / cholesky_matrix[j, j]
     
     return cholesky_matrix
+
+
+
+def get_correlation_among_stocks(array):
+    
+    n = array.shape[1] # 종목수
+    ns = 10000
+    dt = 1 / 10
+    
+    rn = np.zeros((n, 1))
+    v = np.zeros(ns)
+    S = np.zeros((ns, n))
+    
+    current_position = np.array([798000000, 212800000, 406300000, 240030000, 730515000])
+    
     

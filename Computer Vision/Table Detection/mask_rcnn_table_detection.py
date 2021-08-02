@@ -1,6 +1,11 @@
 import sys
 sys.path.append('c:/etc/code/practice/computer vision/table detection/mask-rcnn-tf2')
 
+import mrcnn
+import mrcnn.utils
+import mrcnn.config
+from mrcnn.model import MaskRCNN
+
 import numpy as np
 import os
 import json
@@ -10,10 +15,6 @@ import tensorflow as tf
 tf.compat.v1.disable_eager_execution() 
 from tqdm import tqdm
 
-import mrcnn
-import mrcnn.utils
-import mrcnn.config
-from mrcnn.model import MaskRCNN
 
 
         
@@ -25,6 +26,8 @@ class TableConfig(mrcnn.config.Config):
     NUM_CLASSES = 2
     
     
+
+
 class TablebankDataset(mrcnn.utils.Dataset):
     
         
@@ -34,7 +37,7 @@ class TablebankDataset(mrcnn.utils.Dataset):
             
         image_info, annotations = file['images'], file['annotations']
         info = []
-        for image in tqdm(image_info[:1000]):
+        for image in tqdm(image_info):
             try:
                 bbox = list(filter(lambda x: x['id'] == image['id'], annotations))[0]['bbox']
             except:

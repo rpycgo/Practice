@@ -4,43 +4,99 @@
 
 using namespace std;
 
-int number = 7;
-int c[7];
-vector<int> a[8];
+
+class Algorithm
+{	
+private:
+	int vertex;
+	int edge;
+	int* bfs_check_vector;
+	int* dfs_check_vector;
+	vector<int> a[1001];
+
+public:
+	Algorithm(int vertex, int edge);
+	void connectEdge();
+	void BFS(int start);
+	void DFS(int start);
+};
 
 
-void bfs(int start) {
+Algorithm::Algorithm(int vertex, int edge) {
+
+	this->vertex = vertex;
+	this->edge = edge;
+
+	this->bfs_check_vector = new int[(this->vertex + 1)]{};
+	this->dfs_check_vector = new int[(this->vertex + 1)]{};
+
+	Algorithm:: connectEdge();
+}
+
+
+void Algorithm::connectEdge() {
+	
+	int start_vertex, end_vertex;
+	for (int i = 0; i < this->edge; i++) {
+		cin >> start_vertex >> end_vertex;
+		this->a[start_vertex].push_back(end_vertex);
+		this->a[end_vertex].push_back(start_vertex);
+	}
+
+}
+
+
+void Algorithm::BFS(int start) {
+	
 	queue<int> q;
+	
 	q.push(start);
-	c[start] = true;
+	this->bfs_check_vector[start] = true;
 	while (!q.empty()) {
 		int x = q.front();
 		q.pop();
-		printf("%d ", x);
-			for (int i = 0; i < a[x].size(); i++) {
-				int y = a[x][i];
-				if (!c[y]) {
-					q.push(y);
-					c[y] = true;
-				}
+		printf("%d ", x);		
+		for (unsigned int i = 0; i < this->a[x].size(); i++) {
+			int y = this->a[x][i];
+			if (!this->bfs_check_vector[y]) {
+				q.push(y);
+				this->bfs_check_vector[y] = true;
 			}
+		}
 	}
+
+	delete[] this->bfs_check_vector;
+}
+
+void Algorithm::DFS(int start) {
+
+	if (this -> dfs_check_vector[start]) {
+		return;
+	}
+	
+	this->dfs_check_vector[start] = true;
+	cout << start << ' ';
+	for (unsigned int i = 0; i < this->a[start].size(); i++) {
+		DFS(this->a[start][i]);
+	}
+
+	
 }
 
 
 
 
+int main() {
 
-int main(void) {
-	a[1].push_back(2);
-	a[1].push_back(3);
-	a[1].push_back(4);
+	int vertex, edge, start;
 
-	a[2].push_back(4);
-
-	a[3].push_back(4);
+	cin >> vertex >> edge >> start;
 	
-	bfs(1);
+	Algorithm algorithm(vertex, edge);
 
+	algorithm.DFS(start);
+	cout << endl;
+	algorithm.BFS(start);
+	
 	return 0;
 }

@@ -30,7 +30,7 @@ void Combination::pick(int n, vector<int>& picked, int toPick) {
 
 
 void Combination::printPicked(vector<int>& picked) {
-	for (unsigned int i = 0; i <= picked.size(); i++) {
+	for (unsigned int i = 0; i < picked.size(); i++) {
 		cout << picked[i] << ' ';
 	}
 	cout << '\n';
@@ -40,9 +40,7 @@ void Combination::printPicked(vector<int>& picked) {
 
 int main() {
 	Combination combination;
-	vector<int> a = { 1, 2, 3, 4, 5 };
+	vector<int> a = { 0, 1, 2 };
 
-	vector<int> b = { 2, 4 };
-
-	combination.pick(5, b, 3);
+	combination.pick(10, a, 2);
 }

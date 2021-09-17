@@ -3,7 +3,7 @@ def solution(n):
     answer = [1, 1, 1, 2, 2]
     
     if n <= len(answer) - 1:
-        return answer[n - 1]
+        return print(answer[n - 1])
     else:
         for i in range(len(answer), n):
             answer.append(answer[i - 1] + answer[i - 5])

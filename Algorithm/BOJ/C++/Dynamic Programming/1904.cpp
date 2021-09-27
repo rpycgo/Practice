@@ -7,11 +7,17 @@ int solution(int N) {
 
 	vector<int> answer = { 1, 2 };
 
-	for (int i = 2; i < N; i++) {
-		answer.push_back((answer[i - 1] + answer[i - 2]) % 15746);
+	if (N == 1) {
+		return answer[0];
 	}
+	else {
+		for (int i = 2; i < N; i++) {
+			answer.push_back((answer[1] + answer[0]) % 15746);
+			answer.erase(answer.begin());
+		}
 
-	return answer[N - 1];
+		return answer[1];
+	}
 }
 
 
